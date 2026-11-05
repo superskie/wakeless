@@ -1,0 +1,15 @@
+{
+  "name": "wakeless-live",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Wakeless live mode on the NEAR Intents Agent API: a policy-bound agent wallet that can only swap.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@near-intents-agent-api/sdk": "^0.7.3",
+    "viem": "^2.56.8"
+  }
+}

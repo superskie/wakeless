@@ -107,17 +107,58 @@ only numbers taken at the same moment are compared.
   4.4 bps more SOL than public quotes taken at the same moment, from $1,000 to
   $250,000
   ([raw quotes](research/confidential/usdc-arb_sol-sol_2026-11-05t03-37-19-519z.json)).
-- Live mode (in progress, see below) runs on the NEAR Intents Agent API with
-  Confidential Intents.
+- Live mode (in progress, see below) runs on the NEAR Intents Agent API: an
+  agent account whose owner-signed policy lets it swap and nothing else. The
+  desk sends every swap in confidential form.
 
 ## Live mode (in progress)
 
-Not built yet. The plan uses the NEAR Intents Agent API: the owner signs one
-policy for an agent account, with `actions: ["swap", "withdraw"]`, the
-owner's own address as the only withdrawal destination, and
-`confidential: true`. The desk can then trade the deposited balance but cannot
-send it anywhere except back to the owner, the owner can freeze it at any
-time, and balances and slices between deposit and withdrawal are not public.
+Live mode runs the desk through an agent account on the NEAR Intents Agent
+API. The owner signs one policy, and the API enforces it on every action the
+desk's grant token asks for:
+
+```json
+{
+  "actions": ["swap"],
+  "confidential": true,
+  "destinations": { "mode": "only", "list": [] },
+  "budget": { "daily_usd": "250", "weekly_usd": null, "monthly_usd": null },
+  "max_actions_per_hour": 120,
+  "frozen": false
+}
+```
+
+The desk can trade the deposited balance but can not send it anywhere.
+`confidential: true` allows the confidential form of each action, and the
+desk sends every swap in that form. A leaked grant can only swap, for at most
+$250 a day, and the owner can freeze the account at any time. The owner is a
+throwaway EVM key: the API derives its NEAR account and sponsors it, so it
+needs no NEAR and holds no funds.
+
+Built and checked on the hackathon demo deployment
+(`https://api.demo.agentsonintents.com`, mainnet) on 5 November 2026:
+
+- Creating the agent with this policy, and issuing the desk's grant.
+- A dry swap of 10 USDC on Base to SOL through the grant returns a quote,
+  the 0.18% fee and the remaining daily budget.
+- A dry withdrawal through the same grant comes back with
+  `policy_action_denied`.
+
+To reproduce, you need a demo partner key from
+`https://partners.demo.agentsonintents.com/dashboard`. Put it in `.env` as
+`NEAR_INTENTS_AGENT_API_KEY`, with
+`NEAR_INTENTS_AGENT_API_URL=https://api.demo.agentsonintents.com`, then:
+
+```sh
+cd live && npm install && cd ..
+node live/agent.mjs owner     # throwaway owner key, written to .env
+node live/agent.mjs create    # agent with the policy above
+node live/agent.mjs grant     # the desk's grant token, written to .env
+node live/agent.mjs quote nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near nep141:sol.omft.near 10000000
+```
+
+Not built yet: the executor that sends each slice of a live order through the
+agent, and a funded live run.
 
 ## Limits of the dry run
 
@@ -161,9 +202,12 @@ Confidential Intents.
 
 ## Built with
 
-Node.js standard library only. The 1Click API (`https://1click.chaindefuser.com`)
-as documented at https://docs.near-intents.org. All code was written during the
-hackathon window.
+The dry run and the web desk use the Node.js standard library only, plus the
+1Click API (`https://1click.chaindefuser.com`) as documented at
+https://docs.near-intents.org. Live mode (`live/`) adds the
+`@near-intents-agent-api/sdk` and `viem` packages for the Agent API
+(https://docs.agentsonintents.com). Fonts are self-hosted under the SIL Open
+Font License. All code was written during the hackathon window.
 
 ## License
 
