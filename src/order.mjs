@@ -13,7 +13,7 @@ export const DEFAULTS = Object.freeze({
   slippageBps: 100,
   // Label used as refund and recipient in dry quotes. No funds ever reach it;
   // live mode replaces it with the agent's own NEAR Intents account.
-  deskAccount: 'dry-run.desk.near',
+  deskAccount: 'dry-run.wakeless.near',
 });
 
 /**

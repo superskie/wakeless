@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Command line for the desk: price-impact ladder, dry-run orders, reports.
+// Wakeless command line: key check, price-impact ladder, dry-run orders, reports.
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomInt } from 'node:crypto';
@@ -18,10 +18,10 @@ import { fromUnits, toUnits } from '../src/units.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const USAGE = `Usage:
-  desk check
-  desk impact --from <asset> --to <asset> [--usd 100,1000,10000] [--no-save]
-  desk run <order.json> [--speed <n>] [--seed <n>] [--journal <file>]
-  desk report <journal.jsonl> [--json]
+  wakeless check
+  wakeless impact --from <asset> --to <asset> [--usd 100,1000,10000] [--no-save]
+  wakeless run <order.json> [--speed <n>] [--seed <n>] [--journal <file>]
+  wakeless report <journal.jsonl> [--json]
 
 Assets are "symbol:chain" (usdc:arb, sol:sol, btc:btc, eth:eth) or a full
 nep141 id. Every price comes from a live 1Click dry quote; nothing is signed
@@ -80,7 +80,7 @@ async function cmdImpact(args, client) {
   let baseCost = null;
   for (const usd of sizes) {
     const amount = BigInt(Math.round((usd / sell.price) * 10 ** sell.decimals));
-    const body = intentsQuoteBody({ sellAsset: sell.assetId, buyAsset: buy.assetId, amount, account: 'dry-run.desk.near' });
+    const body = intentsQuoteBody({ sellAsset: sell.assetId, buyAsset: buy.assetId, amount, account: 'dry-run.wakeless.near' });
     const res = await client.quote(body);
     const q = normalizeQuote(res, { sellDecimals: sell.decimals, buyDecimals: buy.decimals, amountIn: amount });
     rows.push({ usd, request: body, status: res.status, latencyMs: res.latencyMs, response: res.json, q });
@@ -231,7 +231,7 @@ async function cmdCheck(client, hasKey) {
   ];
   let rejected = false;
   for (const [label, extra] of cases) {
-    const body = { ...intentsQuoteBody({ sellAsset: sell.assetId, buyAsset: buy.assetId, amount, account: 'dry-run.desk.near' }), ...extra };
+    const body = { ...intentsQuoteBody({ sellAsset: sell.assetId, buyAsset: buy.assetId, amount, account: 'dry-run.wakeless.near' }), ...extra };
     const res = await client.quote(body);
     const q = normalizeQuote(res, { sellDecimals: sell.decimals, buyDecimals: buy.decimals, amountIn: amount });
     const detail = q.ok ? `ok, ${fmt(Number(fromUnits(q.amountOut, buy.decimals)), 6)} SOL for $1,000 USDC` : q.message;

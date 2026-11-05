@@ -1,8 +1,8 @@
-# Dark Algo Desk
+# Wakeless
 
 Works a large cross-chain swap in randomized slices through NEAR Intents, so
-the order pays less price impact and does not show a pattern to people who
-watch wallets.
+the order pays less price impact and leaves no pattern for wallet watchers to
+trade against. A large order leaves a wake; the name is the goal.
 
 Built at NEAR HACKATHON (1 to 14 November 2026). Tracks: Unstoppable DeFi
 (`defi`), Agent Economy (`agents`), Privacy & Private AI (`privacy`).
@@ -44,7 +44,7 @@ and rhythm, which tells observers how much is still coming.
 Needs Node 22 or later. No keys, no funds, no dependencies to install.
 
 ```sh
-git clone https://github.com/superskie/dark-algo-desk && cd dark-algo-desk
+git clone https://github.com/superskie/wakeless && cd wakeless
 ```
 
 **Do** `npm test`. **See** 28 passing tests: schedule totals are exact to the
@@ -63,19 +63,19 @@ schedule runs 60 times faster (about 45 seconds); every quote is live. The
 line "Execution cost avoided, market move excluded" compares the slices with
 one swap of the whole order quoted at the same moment.
 
-**Do** `node bin/desk.mjs report examples/sample-run.jsonl`. **See** the
+**Do** `node bin/wakeless.mjs report examples/sample-run.jsonl`. **See** the
 report in [examples/sample-run.md](examples/sample-run.md) rebuilt offline from
 the committed journal of a run on 5 November 2026: the 16 slices cost 23.0 bps
 less than one swap of the whole $500,000 quoted at the same moment, about
 $1,150 more SOL.
 
-**Do** `node bin/desk.mjs check`. **See** whether a partner key is set and the
+**Do** `node bin/wakeless.mjs check`. **See** whether a partner key is set and the
 HTTP status of a public and a confidential dry quote. Without a key the
 confidential quote returns 401; the key is never printed.
 
 Your own order: copy `examples/usdc-arb-to-sol.json`, change `sell`, `buy`
 and `amount` (assets are `symbol:chain`, such as `usdc:arb`, `eth:eth`,
-`sol:sol`), then `node bin/desk.mjs run your-order.json --speed 60`.
+`sol:sol`), then `node bin/wakeless.mjs run your-order.json --speed 60`.
 
 ## How the report measures cost
 
@@ -130,7 +130,7 @@ time, and balances and slices between deposit and withdrawal are not public.
 
 | Path | What it is |
 | --- | --- |
-| `bin/desk.mjs` | Command line: `impact`, `run`, `report` |
+| `bin/wakeless.mjs` | Command line: `check`, `impact`, `run`, `report` |
 | `src/schedule.mjs` | Randomized slice schedule with an exact total |
 | `src/guard.mjs` | Execute, wait, split or skip, as a pure function |
 | `src/engine.mjs` | Arrival snapshot, slice loop, journal events |
@@ -138,6 +138,20 @@ time, and balances and slices between deposit and withdrawal are not public.
 | `src/report.mjs` | Cost report rebuilt from a journal |
 | `examples/` | Example order and a committed run |
 | `research/impact/` | Raw price impact snapshots |
+
+## Related work
+
+- [Stillwater](https://stillwater.finance): a sealed order pool on Solana.
+  Orders are committed as hashes, revealed in short sessions and cleared
+  together at one price against the other orders in the pool.
+- [Sotto Systems](https://sottosystems.xyz): orders encrypted in the client
+  stay unreadable until a drand timelock round opens their epoch, on Robinhood
+  Chain.
+
+Both protect an order inside one venue on one chain. Wakeless works across
+chains on the liquidity of the NEAR Intents solvers that quote every slice,
+hides the order's shape by randomizing it and, in live mode, settles inside
+Confidential Intents.
 
 ## Built with
 
