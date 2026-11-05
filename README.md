@@ -228,14 +228,19 @@ and was worked into SOL with
 - At $6 there is no price impact to avoid, so the slices received 15.5 bps
   less SOL than one swap was quoted at arrival. The run shows the live path
   working; the $500,000 dry run above is the size where slicing pays.
+- Then the owner pointed the withdrawal rule at the wallet that made the
+  deposit (policy revision 3), the desk swapped the SOL back to ETH, and
+  `node live/agent.mjs withdraw ... --execute` paid it out to that wallet on
+  Base. The deposit and withdrawal transactions are left out of this repo on
+  purpose: they would name the owner's wallet.
 
-What the chain shows for the agent afterwards:
+What the chain showed while the agent held the SOL:
 
-**Do** `node live/public-view.mjs 0d54a875b32c4ad1668c3e86e807ab28905133c93e1daae19653decaedea079f`.
-**See** the agent's balances on the public `intents.near` ledger: 0 SOL and
-0 ETH (block 223137273), while the Agent API reported 62,710,076 base units of
-SOL (0.062710076) in the agent's confidential balance at the same time. The
-public column needs no keys. nearblocks.io listed no transactions for the
+**Do** `node live/public-view.mjs 0d54a875b32c4ad1668c3e86e807ab28905133c93e1daae19653decaedea079f --block 223137273`.
+**See** the agent's balances on the public `intents.near` ledger at that block,
+read through an archival node: 0 SOL and 0 ETH, while the Agent API reported
+62,710,076 base units of SOL (0.062710076) in the agent's confidential
+balance at the same time. It needs no keys. nearblocks.io listed no transactions for the
 account, and the API returned no public transaction hash for the four swaps,
 only intent hashes. What is public is the way in, the ETH transfer on Base to
 the deposit address, and later the way out to the owner's wallet.

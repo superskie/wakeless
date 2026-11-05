@@ -3,31 +3,44 @@
 // intents.near ledger, next to the confidential balances the Agent API reports
 // when the agent's keys are in .env. The public half needs no keys.
 //
-//   node live/public-view.mjs [near account id] [asset id ...]
+//   node live/public-view.mjs [near account id] [--block <height>] [asset id ...]
+//
+// --block reads the ledger as it was at that block height, through an
+// archival node, and skips the confidential side (the API only reports now).
 const RPC = 'https://rpc.mainnet.near.org';
+const ARCHIVAL_RPCS = ['https://archival-rpc.mainnet.fastnear.com', 'https://archival-rpc.mainnet.near.org'];
 const DEFAULT_ASSETS = [
   'nep141:base.omft.near',
   'nep141:sol.omft.near',
   'nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near',
 ];
 
-async function publicBalances(accountId, assets) {
+async function publicBalances(accountId, assets, blockHeight = null) {
   const args = Buffer.from(JSON.stringify({ account_id: accountId, token_ids: assets })).toString('base64');
-  const res = await fetch(RPC, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: 1,
-      method: 'query',
-      params: { request_type: 'call_function', finality: 'final', account_id: 'intents.near', method_name: 'mt_batch_balance_of', args_base64: args },
-    }),
-    signal: AbortSignal.timeout(20_000),
-  });
-  const json = await res.json();
-  if (!json.result?.result) throw new Error(`NEAR RPC: ${JSON.stringify(json.error ?? json).slice(0, 200)}`);
-  const values = JSON.parse(Buffer.from(json.result.result).toString());
-  return { block: json.result.block_height, balances: Object.fromEntries(assets.map((a, i) => [a, values[i]])) };
+  const at = blockHeight == null ? { finality: 'final' } : { block_id: blockHeight };
+  const errors = [];
+  for (const rpc of blockHeight == null ? [RPC] : ARCHIVAL_RPCS) {
+    try {
+      const res = await fetch(rpc, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'query',
+          params: { request_type: 'call_function', ...at, account_id: 'intents.near', method_name: 'mt_batch_balance_of', args_base64: args },
+        }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      const json = await res.json();
+      if (!json.result?.result) throw new Error(JSON.stringify(json.error ?? json).slice(0, 200));
+      const values = JSON.parse(Buffer.from(json.result.result).toString());
+      return { block: json.result.block_height, balances: Object.fromEntries(assets.map((a, i) => [a, values[i]])) };
+    } catch (err) {
+      errors.push(`${rpc}: ${err.message}`);
+    }
+  }
+  throw new Error(`NEAR RPC failed: ${errors.join(' | ')}`);
 }
 
 /** Confidential balances from the Agent API, when this checkout has the agent's keys. */
@@ -48,12 +61,17 @@ async function confidentialView() {
 }
 
 async function main() {
-  const [accountArg, ...assetArgs] = process.argv.slice(2);
-  const confidential = await confidentialView();
+  const argv = process.argv.slice(2);
+  const blockAt = argv.indexOf('--block');
+  const blockHeight = blockAt >= 0 ? Number(argv[blockAt + 1]) : null;
+  if (blockAt >= 0 && !Number.isInteger(blockHeight)) throw new Error('--block needs a block height');
+  const positional = argv.filter((_, i) => blockAt < 0 || (i !== blockAt && i !== blockAt + 1));
+  const [accountArg, ...assetArgs] = positional;
+  const confidential = blockHeight == null ? await confidentialView() : null;
   const account = accountArg ?? confidential?.account;
-  if (!account) throw new Error('usage: node live/public-view.mjs <near account id> [asset id ...]');
+  if (!account) throw new Error('usage: node live/public-view.mjs <near account id> [--block <height>] [asset id ...]');
   const assets = assetArgs.length ? assetArgs : [...new Set([...DEFAULT_ASSETS, ...Object.keys(confidential?.balances ?? {})])];
-  const pub = await publicBalances(account, assets);
+  const pub = await publicBalances(account, assets, blockHeight);
 
   console.log(`Account ${account}`);
   console.log(`Public intents.near ledger at block ${pub.block}${confidential ? ', next to the Agent API confidential balance' : ''}:\n`);
