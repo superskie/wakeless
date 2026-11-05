@@ -15,6 +15,22 @@ function snapshot({ body, res, q }) {
 }
 
 /**
+ * Cost of a fill against the USD mid quoted with it. When the settled amount
+ * differs from the quoted one (live fills), the output value is scaled to it.
+ */
+function realizedCostBps(q, amountOut) {
+  if (!(q.inUsd > 0) || !(q.outUsd > 0) || !(q.amountOut > 0n) || !(amountOut > 0n)) return q.costBps ?? null;
+  const outUsd = amountOut === q.amountOut ? q.outUsd : (q.outUsd * Number(amountOut)) / Number(q.amountOut);
+  return (1 - outUsd / q.inUsd) * 10_000;
+}
+
+/**
+ * The executor contract: `execute({ slice, quote, request, floorRate, order })`
+ * returns `{ status, amountIn, amountOut, minAmountOut?, txHashes?, details?,
+ * next?, message? }`. Amounts are what actually traded (0n when nothing did).
+ * `next: 'retry'` queues the slice again like a deferral, `next: 'halt'` stops
+ * the order (a person has to look), anything else moves on.
+ *
  * @param {object} p
  * @param {object} p.order from prepareOrder
  * @param {{ quote: (body: object) => Promise<object> }} p.client
@@ -101,19 +117,33 @@ export async function runOrder({ order, client, executor, clock, journal, rand, 
     emit('slice', { slice, floorRate, quote: snapshot(quote), decision });
 
     if (decision.action === Action.EXECUTE) {
-      const fill = await executor.execute({ slice, quote: quote.q, request: quote.body });
+      const fill = await executor.execute({ slice, quote: quote.q, request: quote.body, floorRate, order });
       emit('fill', {
         sliceId: slice.id,
         status: fill.status,
         amountIn: fill.amountIn,
         amountOut: fill.amountOut,
+        minAmountOut: fill.minAmountOut ?? null,
         txHashes: fill.txHashes ?? [],
         quotedRate: quote.q.rate,
-        costBps: quote.q.costBps,
+        quotedAmountOut: quote.q.amountOut,
+        costBps: realizedCostBps(quote.q, fill.amountOut),
         midRate: quote.q.midRate,
         inUsd: quote.q.inUsd,
         outUsd: quote.q.outUsd,
+        ...(fill.details ? { details: fill.details } : {}),
       });
+      if (fill.next === 'halt') {
+        emit('halt', { sliceId: slice.id, status: fill.status, message: fill.message ?? `slice ${slice.id} ended ${fill.status}` });
+        return { aborted: false, halted: true };
+      }
+      if (fill.next === 'retry') {
+        if (slice.defers < order.maxDefers && retryAt <= order.horizonMs) {
+          queue.push({ ...slice, atMs: retryAt, defers: slice.defers + 1 });
+        } else {
+          emit('skip', { sliceId: slice.id, amount: slice.amount, reason: `not_filled_${String(fill.status).toLowerCase()}` });
+        }
+      }
     } else if (decision.action === Action.DEFER) {
       queue.push({ ...slice, atMs: retryAt, defers: slice.defers + 1 });
     } else if (decision.action === Action.SPLIT) {

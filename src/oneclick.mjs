@@ -130,6 +130,8 @@ export function normalizeQuote(res, { sellDecimals, buyDecimals, amountIn }) {
       minAmountOut: q.minAmountOut ?? null,
       timeEstimate: q.timeEstimate ?? null,
       latencyMs: res.latencyMs,
+      // Agent API previews say here when the real request would be refused.
+      warnings: Array.isArray(res.json.warnings) ? res.json.warnings : [],
     };
   }
   const message = res?.json?.message ?? `HTTP ${res?.status}`;
@@ -137,7 +139,9 @@ export function normalizeQuote(res, { sellDecimals, buyDecimals, amountIn }) {
     ok: false,
     status: res?.status ?? 0,
     message,
-    noLiquidity: /no liquidity/i.test(message),
+    // 1Click says "No liquidity available"; the Agent API says
+    // "No route or liquidity is available" with code route_unavailable.
+    noLiquidity: /no liquidity|no route/i.test(message) || res?.json?.code === 'route_unavailable',
     latencyMs: res?.latencyMs ?? null,
   };
 }

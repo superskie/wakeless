@@ -5,6 +5,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAgentApi } from '@near-intents-agent-api/sdk';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
+import { waitForStatus } from './status.mjs';
+
+export { waitForStatus };
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const ENV_FILE = path.join(ROOT, '.env');
@@ -85,18 +88,6 @@ export async function signEvmIntent(account, generated) {
   if (intent.standard !== 'eip712') throw new Error(`expected an eip712 intent, got ${intent.standard}`);
   const signature = await account.signTypedData(intent.payload);
   return { ...intent, signature };
-}
-
-const MOVING = new Set(['PROCESSING', 'QUEUED']);
-
-/** Polls an operation until it stops moving (terminal, pending a human, or uncertain). */
-export async function waitForStatus(api, correlationId, timeoutMs = 180_000) {
-  const signal = AbortSignal.timeout(timeoutMs);
-  for (;;) {
-    signal.throwIfAborted();
-    const status = await api.getStatus(correlationId, { waitMs: 30_000, signal });
-    if (!MOVING.has(status.status)) return status;
-  }
 }
 
 /** generate, sign with the owner key, submit, then follow the status. */

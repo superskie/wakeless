@@ -5,13 +5,14 @@
 //   node live/agent.mjs create             create the agent with the Wakeless policy
 //   node live/agent.mjs grant              issue the desk's grant token (.env)
 //   node live/agent.mjs status             agent, policy and balances
-//   node live/agent.mjs deposit <asset> [amount]   deposit address for funding
+//   node live/agent.mjs deposit <asset> [amount]   deposit address; funds land in the confidential balance
+//   node live/agent.mjs shield <asset> <amount>    move a public balance into the confidential one
 //   node live/agent.mjs quote <from> <to> <amount> preview a swap (dry, no funds move)
 //
 // Assets are full asset ids as listed by GET /v1/tokens (for example
 // nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near).
 import { createGrantCredential, createIdempotencyKey } from '@near-intents-agent-api/sdk';
-import { agentApi, appendEnv, createOwnerKey, loadOwner, readEnv, required, runOwnerIntent, show, wakelessPolicy } from './lib.mjs';
+import { agentApi, appendEnv, createOwnerKey, loadOwner, readEnv, required, runOwnerIntent, show, waitForStatus, wakelessPolicy } from './lib.mjs';
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -83,9 +84,34 @@ async function main() {
       const agentId = required(env, 'WAKELESS_AGENT_ID');
       const [asset, amount] = args;
       if (!asset) throw new Error('usage: deposit <asset id> [amount in base units]');
-      const status = await api.deposit(agentId, { origin_asset: asset, ...(amount ? { amount } : {}) }, { idempotencyKey: createIdempotencyKey() });
+      // The desk swaps in confidential form, which spends the confidential balance.
+      const status = await api.deposit(
+        agentId,
+        { origin_asset: asset, ...(amount ? { amount } : {}), confidential: true },
+        { idempotencyKey: createIdempotencyKey() },
+      );
       const d = status.details;
-      show({ correlation_id: status.correlation_id, status: status.status, deposit_address: d.deposit_address, memo: d.memo ?? null, min_amount: d.min_amount, expires_at: d.expires_at, refund_to: d.refund_to });
+      show({
+        correlation_id: status.correlation_id,
+        status: status.status,
+        confidential: d.confidential ?? true,
+        deposit_address: d.deposit_address,
+        memo: d.memo ?? null,
+        min_amount: d.min_amount,
+        expires_at: d.expires_at,
+        refund_to: d.refund_to,
+      });
+      return;
+    }
+    case 'shield': {
+      const api = agentApi(env);
+      const agentId = required(env, 'WAKELESS_AGENT_ID');
+      const bot = api.forGrant(required(env, 'WAKELESS_GRANT_TOKEN', 'run: node live/agent.mjs grant'));
+      const [asset, amount] = args;
+      if (!asset || !amount) throw new Error('usage: shield <asset id> <amount in base units>');
+      const started = await bot.shield(agentId, { asset, amount }, { idempotencyKey: createIdempotencyKey() });
+      const final = await waitForStatus(api, started.correlation_id);
+      show({ correlation_id: final.correlation_id, status: final.status, failure_code: final.failure_code });
       return;
     }
     case 'quote': {
@@ -100,7 +126,7 @@ async function main() {
       return;
     }
     default:
-      console.log('commands: owner | create | grant | status | deposit <asset> [amount] | quote <from> <to> <amount>');
+      console.log('commands: owner | create | grant | status | deposit <asset> [amount] | shield <asset> <amount> | quote <from> <to> <amount>');
   }
 }
 

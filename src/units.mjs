@@ -41,3 +41,21 @@ export function toNumber(units, decimals) {
 export function bps(part, whole) {
   return (part / whole) * 10_000;
 }
+
+/**
+ * Smallest output, in buy base units, that still meets `rate` (buy per sell,
+ * in human units) for `amountIn` sell base units. Rounds up, so a fill at the
+ * returned amount is never below the rate. Used as a swap's minimum output.
+ * @param {number} rate
+ * @param {bigint} amountIn
+ * @param {number} sellDecimals
+ * @param {number} buyDecimals
+ * @returns {bigint}
+ */
+export function minOutAtRate(rate, amountIn, sellDecimals, buyDecimals) {
+  if (!(rate > 0) || amountIn <= 0n) return 0n;
+  const rateScaled = BigInt(Math.ceil(rate * 1e18));
+  const num = amountIn * rateScaled * 10n ** BigInt(buyDecimals);
+  const den = 10n ** 18n * 10n ** BigInt(sellDecimals);
+  return (num + den - 1n) / den;
+}

@@ -1,0 +1,123 @@
+#!/usr/bin/env node
+// Work an order through the Wakeless agent on the NEAR Intents Agent API.
+import fs from 'node:fs';
+import path from 'node:path';
+import { randomInt } from 'node:crypto';
+import { prepareOrder } from '../src/order.mjs';
+import { runOrder } from '../src/engine.mjs';
+import { realClock } from '../src/clock.mjs';
+import { fileJournal, readJournal } from '../src/journal.mjs';
+import { buildReport, renderReport } from '../src/report.mjs';
+import { mulberry32 } from '../src/rng.mjs';
+import { fromUnits } from '../src/units.mjs';
+import { describeEvent } from '../src/describe.mjs';
+import { agentApi, readEnv, required, ROOT } from './lib.mjs';
+import { agentQuoteClient, priceBook } from './quote-client.mjs';
+import { agentExecutor } from './executor.mjs';
+
+const USAGE = `Usage:
+  node live/run.mjs <order.json> [--speed <n>] [--seed <n>] [--journal <file>]
+      Preview (default). Every price is the agent's own swap preview, requested
+      through its grant and checked against its signed policy. Nothing is
+      submitted and no funds move.
+  node live/run.mjs <order.json> --live --confirm [--speed <n>] [--seed <n>]
+      Live. Each slice that clears the floor is submitted as a confidential
+      swap whose minimum output is the floor. Spends the agent's balance.
+
+Needs NEAR_INTENTS_AGENT_API_KEY, WAKELESS_AGENT_ID and WAKELESS_GRANT_TOKEN
+in .env (node live/agent.mjs owner, create, grant).`;
+
+function parseArgs(argv) {
+  const args = { _: [] };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (!a.startsWith('--')) {
+      args._.push(a);
+      continue;
+    }
+    const next = argv[i + 1];
+    if (next === undefined || next.startsWith('--')) args[a.slice(2)] = true;
+    else {
+      args[a.slice(2)] = next;
+      i++;
+    }
+  }
+  return args;
+}
+
+const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const file = args._[0];
+  if (!file || args.help) {
+    console.log(USAGE);
+    process.exitCode = file ? 0 : 1;
+    return;
+  }
+  const live = Boolean(args.live);
+  if (live && !args.confirm) throw new Error("live mode spends the agent's balance; add --confirm to go ahead");
+
+  const env = readEnv();
+  const api = agentApi(env);
+  const agentId = required(env, 'WAKELESS_AGENT_ID', 'run: node live/agent.mjs create');
+  const bot = api.forGrant(required(env, 'WAKELESS_GRANT_TOKEN', 'run: node live/agent.mjs grant'));
+
+  const [agent, policyView] = await Promise.all([api.getAgent(agentId), api.getPolicy(agentId)]);
+  if (agent.status !== 'ACTIVE') throw new Error(`agent ${agentId} is ${agent.status}`);
+  const policy = policyView.policy;
+  if (policy.frozen) throw new Error('the agent is frozen by its owner');
+
+  const prices = priceBook(api);
+  const spec = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const order = prepareOrder({ ...spec, deskAccount: agent.wallet.near_account_id }, await prices.tokens());
+
+  console.log(
+    `Agent ${agentId.slice(0, 8)}... policy revision ${policyView.revision}: actions ${policy.actions.join(', ')}, ` +
+      `confidential ${policy.confidential ? 'allowed' : 'not allowed'}, budget $${policy.budget?.daily_usd ?? '-'} a day.`,
+  );
+  if (live) {
+    const { balances } = await api.getBalances(agentId, { source: 'confidential' });
+    const entry = balances.find((b) => b.asset_id === order.sell.assetId);
+    const available = BigInt(entry?.available_raw ?? 0);
+    if (available < order.totalUnits) {
+      throw new Error(
+        `the agent's confidential balance holds ${fromUnits(available, order.sell.decimals)} ${order.sell.symbol} and the order needs ${order.amount}; ` +
+          'fund it first with node live/agent.mjs deposit <asset> <amount>, or shield a public balance',
+      );
+    }
+    console.log(`LIVE: up to ${order.amount} ${order.sell.symbol} of the agent's confidential balance will be swapped.`);
+  } else {
+    console.log('Preview: quotes come from the agent; nothing is submitted and no funds move.');
+  }
+
+  const speed = args.speed ? Number(args.speed) : 1;
+  const seed = args.seed !== undefined ? Number(args.seed) : randomInt(2 ** 31);
+  const mode = live ? 'live' : 'preview';
+  const journalFile = args.journal ?? path.join(ROOT, 'journals', `${order.id}_${mode}_${stamp()}.jsonl`);
+
+  await runOrder({
+    order,
+    client: agentQuoteClient({ bot, agentId, prices, confidential: true }),
+    executor: agentExecutor({ api, bot, agentId, mode, confidential: true }),
+    clock: realClock({ speed }),
+    journal: fileJournal(journalFile),
+    rand: mulberry32(seed),
+    seed,
+    onEvent: (event) => {
+      const line = describeEvent(event, order, speed);
+      if (line) console.log(line);
+    },
+  });
+
+  const report = renderReport(buildReport(readJournal(journalFile)));
+  const reportFile = journalFile.replace(/\.jsonl$/, '.md');
+  fs.writeFileSync(reportFile, report);
+  console.log(`\n${report}`);
+  console.log(`Journal: ${path.relative(process.cwd(), journalFile)}\nReport:  ${path.relative(process.cwd(), reportFile)}`);
+}
+
+main().catch((err) => {
+  console.error(`error: ${err.message}`);
+  process.exitCode = 1;
+});

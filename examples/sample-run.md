@@ -11,11 +11,12 @@ Sold 500,000.00 USDC (arb) for 5,184.628696 SOL (sol) in 16 fills over 29m 01s o
 
 Costs are measured against the USD prices 1Click returns with each quote and include its platform fee (25 bps without an API key; with one, 20 bps, or 1 bp on stablecoin pairs). Those prices can lag the market by a few bps, so compare numbers taken at the same moment, as the one-shot comparison below does.
 
+The USD reference prices did not change while this order was worked, so this report can not split a market move from execution cost: the market-move line reads 0 and execution cost includes any move. The one-shot comparison below compares SOL received directly and does not depend on those prices.
+
 One-shot alternative at arrival: 500,000.00 USDC in a single swap.
 
 - Quoted cost 49.2 bps, 5,172.671860 SOL for the filled amount.
 - Slicing received +11.956836 SOL (+23.1 bps, about $1,149.77 at the arrival price), market move included.
-- Execution cost avoided, market move excluded: +23.0 bps.
 
 | Slice | Order time | Sold | Received | Rate | Cost bps | Status |
 | --- | --- | ---: | ---: | ---: | ---: | --- |

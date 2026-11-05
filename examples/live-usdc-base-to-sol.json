@@ -1,0 +1,14 @@
+{
+  "id": "live-usdc-base-sol",
+  "sell": "usdc:base",
+  "buy": "sol:sol",
+  "amount": "12",
+  "slices": 4,
+  "horizonMinutes": 6,
+  "timeJitter": 0.8,
+  "sizeJitter": 0.3,
+  "maxAdverseBps": 60,
+  "maxDefers": 2,
+  "minSliceUsd": 1,
+  "slippageBps": 100
+}
