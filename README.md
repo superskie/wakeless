@@ -10,16 +10,15 @@ Built at NEAR HACKATHON (1 to 14 November 2026). Tracks: Unstoppable DeFi
 ## The problem
 
 One large swap pays for its own size. On 5 November 2026 at 02:30 UTC, the
-NEAR Intents 1Click API quoted USDC on Arbitrum to SOL on Solana at these
-all-in costs against the mid price
+NEAR Intents 1Click API quoted USDC on Arbitrum to SOL on Solana like this
 ([raw quotes](research/impact/usdc-arb_sol-sol_2026-11-05t02-30-14-324z.json)):
 
-| Order size | Cost |
+| Order size | Extra cost against a $1,000 swap |
 | ---: | ---: |
-| $10,000 | 15.9 bps |
-| $100,000 | 25.6 bps |
-| $500,000 | 41.1 bps |
-| $1,000,000 | "No liquidity available" |
+| $10,000 | about 0 bps |
+| $100,000 | +8.9 bps |
+| $500,000 | +24.5 bps |
+| $1,000,000 | no quote: "No liquidity available" |
 
 Trading desks split such orders over time (TWAP). Done from a normal wallet,
 every slice is a public transaction from the same address at a regular size
@@ -66,9 +65,13 @@ one swap of the whole order quoted at the same moment.
 
 **Do** `node bin/desk.mjs report examples/sample-run.jsonl`. **See** the
 report in [examples/sample-run.md](examples/sample-run.md) rebuilt offline from
-the committed journal of a run on 5 November 2026: 16 fills at 26.2 bps
-against 49.2 bps for one swap, 23.0 bps less execution cost, about $1,150 more
-SOL on $500,000.
+the committed journal of a run on 5 November 2026: the 16 slices cost 23.0 bps
+less than one swap of the whole $500,000 quoted at the same moment, about
+$1,150 more SOL.
+
+**Do** `node bin/desk.mjs check`. **See** whether a partner key is set and the
+HTTP status of a public and a confidential dry quote. Without a key the
+confidential quote returns 401; the key is never printed.
 
 Your own order: copy `examples/usdc-arb-to-sol.json`, change `sell`, `buy`
 and `amount` (assets are `symbol:chain`, such as `usdc:arb`, `eth:eth`,
@@ -76,13 +79,21 @@ and `amount` (assets are `symbol:chain`, such as `usdc:arb`, `eth:eth`,
 
 ## How the report measures cost
 
-All costs are in basis points of the input value.
+All costs are in basis points of the input value, measured against the USD
+prices 1Click returns with each quote.
 
-- Execution cost: each fill's cost against the USD mid prices 1Click returns
-  with that quote, weighted by size. Fees, spread and price impact.
-- Implementation shortfall: realized rate against the mid at arrival.
+- Execution cost: each fill's cost, weighted by size. Fees, spread and price
+  impact.
+- Implementation shortfall: realized rate against the price at arrival.
   Execution cost plus whatever the market did while the order was worked.
 - One-shot alternative: the whole order quoted as a single swap at arrival.
+
+Every cost includes the 1Click platform fee: 25 bps without an API key, and
+with one 20 bps, or 1 bp on stablecoin pairs
+([fees](https://docs.near-intents.org/resources/fees)). The fee is a
+percentage, so slicing does not add fees, and it cancels out of the
+comparison with one swap. The USD prices can lag the market by a few bps, so
+only numbers taken at the same moment are compared.
 
 ## What is specific to NEAR
 

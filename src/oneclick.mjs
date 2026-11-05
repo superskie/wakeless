@@ -65,6 +65,7 @@ export function createOneClick({
 
   return {
     base,
+    hasKey: Boolean(apiKey),
     tokens: () => request('GET', '/v0/tokens'),
     quote: (body) => request('POST', '/v0/quote', body),
   };

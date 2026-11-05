@@ -138,10 +138,14 @@ export function renderReport(r) {
     '',
     '| Cost in bps of the input | bps |',
     '| --- | ---: |',
-    `| Execution cost: fees, spread and impact against the mid at each fill | ${num(r.costs.executionCostBps, 1)} |`,
+    `| Execution cost: fees, spread and impact at each fill | ${num(r.costs.executionCostBps, 1)} |`,
     `| Market move while the order was worked | ${signed(r.costs.timingBps)} |`,
-    `| Implementation shortfall against the arrival mid | ${num(r.costs.shortfallBps, 1)} |`,
+    `| Implementation shortfall against arrival | ${num(r.costs.shortfallBps, 1)} |`,
     `| Reference: one slice-sized swap at arrival | ${num(r.costs.arrivalProbeBps, 1)} |`,
+    '',
+    'Costs are measured against the USD prices 1Click returns with each quote and include its platform fee ' +
+      '(25 bps without an API key; with one, 20 bps, or 1 bp on stablecoin pairs). Those prices can lag the market by a few bps, so compare ' +
+      'numbers taken at the same moment, as the one-shot comparison below does.',
     '',
   );
 

@@ -94,6 +94,10 @@ async function cmdImpact(args, client) {
       console.log(`${fmt(usd, 0).padStart(12)}   ${q.message} (HTTP ${q.status})`);
     }
   }
+  console.log(
+    `\nCost is measured against the USD prices 1Click returns with each quote and includes its platform fee ` +
+      `(${client.hasKey ? 'partner schedule' : '25 bps without an API key'}). "vs smallest" isolates the effect of size.`,
+  );
   if (!args['no-save']) {
     const file = path.join(ROOT, 'research', 'impact', `${sell.symbol}-${sell.blockchain}_${buy.symbol}-${buy.blockchain}_${stamp()}.json`.toLowerCase());
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -225,12 +229,21 @@ async function cmdCheck(client, hasKey) {
     // need a signed user intent, which live mode gets through the Agent API.
     ['confidential swap, Arbitrum to Solana', { ...placeholders, confidentiality: 'basic' }],
   ];
+  let rejected = false;
   for (const [label, extra] of cases) {
     const body = { ...intentsQuoteBody({ sellAsset: sell.assetId, buyAsset: buy.assetId, amount, account: 'dry-run.desk.near' }), ...extra };
     const res = await client.quote(body);
     const q = normalizeQuote(res, { sellDecimals: sell.decimals, buyDecimals: buy.decimals, amountIn: amount });
-    const detail = q.ok ? `ok, $1,000 USDC to SOL costs ${fmt(q.costBps, 1)} bps` : q.message;
+    const detail = q.ok ? `ok, ${fmt(Number(fromUnits(q.amountOut, buy.decimals)), 6)} SOL for $1,000 USDC` : q.message;
     console.log(`${label.padEnd(40)} HTTP ${res.status}  ${detail}`);
+    if (hasKey && res.status === 401 && /invalid token/i.test(q.message)) rejected = true;
+  }
+  if (rejected) {
+    console.log(
+      '\n1Click rejected ONECLICK_API_KEY, so every quote fails while it is set. Partner keys are JWTs from ' +
+        'https://partners.near-intents.org/home. A key starting with sk- is a NEAR AI Cloud key. ' +
+        'Clear the variable to run dry quotes without a key.',
+    );
   }
 }
 

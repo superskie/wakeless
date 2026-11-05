@@ -4,10 +4,12 @@ Sold 500,000.00 USDC (arb) for 5,184.628696 SOL (sol) in 16 fills over 29m 01s o
 
 | Cost in bps of the input | bps |
 | --- | ---: |
-| Execution cost: fees, spread and impact against the mid at each fill | 26.2 |
+| Execution cost: fees, spread and impact at each fill | 26.2 |
 | Market move while the order was worked | +0.0 |
-| Implementation shortfall against the arrival mid | 26.2 |
+| Implementation shortfall against arrival | 26.2 |
 | Reference: one slice-sized swap at arrival | 26.6 |
+
+Costs are measured against the USD prices 1Click returns with each quote and include its platform fee (25 bps without an API key; with one, 20 bps, or 1 bp on stablecoin pairs). Those prices can lag the market by a few bps, so compare numbers taken at the same moment, as the one-shot comparison below does.
 
 One-shot alternative at arrival: 500,000.00 USDC in a single swap.
 
