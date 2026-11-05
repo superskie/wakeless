@@ -15,6 +15,7 @@
     "test": "node --test \"test/**/*.test.mjs\"",
     "demo": "node bin/wakeless.mjs run examples/usdc-arb-to-sol.json --speed 60",
     "impact": "node bin/wakeless.mjs impact --from usdc:arb --to sol:sol --usd 1000,10000,50000,100000,250000,500000,1000000",
-    "check": "node bin/wakeless.mjs check"
+    "check": "node bin/wakeless.mjs check",
+    "web": "node scripts/serve.mjs"
   }
 }
