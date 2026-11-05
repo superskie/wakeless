@@ -99,8 +99,9 @@ export async function runOwnerIntent(api, account, request) {
 }
 
 /**
- * The Wakeless rulebook, signed once by the owner:
- * - the agent may only swap; it can not transfer or withdraw anywhere,
+ * The Wakeless rulebook, signed once by the owner at creation:
+ * - the agent may only swap; it can not transfer or withdraw anywhere
+ *   (`allow-withdraw` later adds withdrawals to the owner's one address),
  * - the confidential form of each action is allowed (the desk always uses it),
  * - a USD budget and an hourly action cap bound what a leaked grant could do,
  * - the owner can freeze it at any time.

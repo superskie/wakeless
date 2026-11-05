@@ -127,30 +127,40 @@ desk's grant token asks for:
 
 ```json
 {
-  "actions": ["swap"],
+  "actions": ["swap", "withdraw"],
   "confidential": true,
-  "destinations": { "mode": "only", "list": [] },
+  "destinations": {
+    "mode": "only",
+    "list": [{ "action": "withdraw", "chain": "base", "address": "<your own wallet>", "memo": null }]
+  },
   "budget": { "daily_usd": "250", "weekly_usd": null, "monthly_usd": null },
   "max_actions_per_hour": 120,
   "frozen": false
 }
 ```
 
-The desk can trade the deposited balance but can not send it anywhere.
-`confidential: true` allows the confidential form of each action, and the
-desk sends every swap in that form. A leaked grant can only swap, for at most
-$250 a day, and the owner can freeze the account at any time. The owner is a
-throwaway EVM key: the API derives its NEAR account and sponsors it, so it
+The desk can trade the deposited balance and send it to one place only: the
+wallet the owner named. `confidential: true` allows the confidential form of
+each action, and the desk sends every swap in that form. A leaked grant can
+only swap, within $250 a day, or pay that wallet back, and the owner can
+freeze the account at any time. The owner is a throwaway EVM key that only
+signs these rules: the API derives its NEAR account and sponsors it, so it
 needs no NEAR and holds no funds.
+
+The agent starts swap-only (`create`); `allow-withdraw` is the owner's signed
+policy update that adds the one withdrawal address, replacing any earlier one.
 
 Built and checked on the hackathon demo deployment
 (`https://api.demo.agentsonintents.com`, mainnet) on 5 November 2026:
 
-- Creating the agent with this policy, and issuing the desk's grant.
+- Creating the agent swap-only, and issuing the desk's grant. A dry
+  withdrawal through that grant came back with `policy_action_denied`.
 - A dry swap of 10 USDC on Base to SOL through the grant returns a quote,
   a `fee` figure (0.18% at the time) and the remaining daily budget.
-- A dry withdrawal through the same grant comes back with
-  `policy_action_denied`.
+- The owner's policy update to revision 2, adding `withdraw` to one Base
+  address, applied and synced with no gas from the owner. A dry withdrawal of
+  0.001 ETH to that address then previewed a 0.11% fee and no policy warning;
+  to any other address it came back with `policy_destination_denied`.
 
 To reproduce, you need a demo partner key from
 `https://partners.demo.agentsonintents.com/dashboard`. Put it in `.env` as
@@ -163,6 +173,8 @@ node live/agent.mjs owner     # throwaway owner key, written to .env
 node live/agent.mjs create    # agent with the policy above
 node live/agent.mjs grant     # the desk's grant token, written to .env
 node live/agent.mjs quote nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near nep141:sol.omft.near 10000000
+node live/agent.mjs allow-withdraw base <your address>   # owner signs: withdrawals only there
+node live/agent.mjs withdraw nep141:base.omft.near 1000000000000000 base <your address>   # dry preview
 ```
 
 ### Working an order through the agent
@@ -223,7 +235,7 @@ public balance over. Not done yet: a funded live run.
 | `src/engine.mjs` | Arrival snapshot, slice loop, journal events |
 | `src/oneclick.mjs` | 1Click client with retries, quote parsing |
 | `src/report.mjs` | Cost report rebuilt from a journal |
-| `live/agent.mjs` | Agent lifecycle on the Agent API: owner, agent, grant, deposit, preview |
+| `live/agent.mjs` | Agent lifecycle on the Agent API: owner, agent, grant, deposit, withdrawal rule, withdraw |
 | `live/run.mjs` | Works an order through the agent, preview or live |
 | `live/executor.mjs` | Submits a slice as a confidential swap with the floor as minimum output |
 | `live/quote-client.mjs` | The agent's swap preview as the price source |

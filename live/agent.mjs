@@ -7,6 +7,8 @@
 //   node live/agent.mjs status             agent, policy and balances
 //   node live/agent.mjs deposit <asset> [amount]   deposit address; funds land in the confidential balance
 //   node live/agent.mjs shield <asset> <amount>    move a public balance into the confidential one
+//   node live/agent.mjs allow-withdraw <chain> <address>   owner signs: withdrawals only to this address
+//   node live/agent.mjs withdraw <asset> <amount> <chain> <address> [--execute]   preview, or withdraw
 //   node live/agent.mjs quote <from> <to> <amount> preview a swap (dry, no funds move)
 //
 // Assets are full asset ids as listed by GET /v1/tokens (for example
@@ -114,6 +116,48 @@ async function main() {
       show({ correlation_id: final.correlation_id, status: final.status, failure_code: final.failure_code });
       return;
     }
+    case 'allow-withdraw': {
+      // The owner signs a new policy revision: the agent may also withdraw, but
+      // only to this one chain address. Any other recipient is refused.
+      const [chain, address] = args;
+      if (!chain || !address) throw new Error('usage: allow-withdraw <chain> <address>');
+      const api = agentApi(env);
+      const { account } = loadOwner(env);
+      const agentId = required(env, 'WAKELESS_AGENT_ID');
+      const current = await api.getPolicy(agentId);
+      if (!current.policy || current.revision == null) throw new Error('the agent has no applied policy yet');
+      const policy = {
+        ...current.policy,
+        actions: [...new Set([...current.policy.actions, 'withdraw'])],
+        destinations: { mode: 'only', list: [{ action: 'withdraw', chain, address, memo: null }] },
+      };
+      console.log(`Policy revision ${current.revision} -> new revision. Actions ${policy.actions.join(', ')}; withdrawals only to ${chain}:${address}.`);
+      const status = await runOwnerIntent(api, account, { type: 'policy_update', agent_id: agentId, expected_revision: current.revision, policy });
+      if (status.status !== 'SUCCESS') throw new Error(`policy_update ended ${status.status}: ${status.failure_code ?? 'no failure code'}`);
+      const after = await api.getPolicy(agentId);
+      show({ revision: after.revision, provider_policy_synced: after.provider_policy_synced, actions: after.policy.actions, destinations: after.policy.destinations });
+      return;
+    }
+    case 'withdraw': {
+      // Preview by default; --execute withdraws for real, only if the preview has no warnings.
+      const execute = args.includes('--execute');
+      const [asset, amount, chain, recipient] = args.filter((a) => !a.startsWith('--'));
+      if (!asset || !amount || !chain || !recipient) throw new Error('usage: withdraw <asset> <amount in base units> <chain> <address> [--execute]');
+      const api = agentApi(env);
+      const agentId = required(env, 'WAKELESS_AGENT_ID');
+      const bot = api.forGrant(required(env, 'WAKELESS_GRANT_TOKEN', 'run: node live/agent.mjs grant'));
+      // The desk's funds sit in the confidential balance.
+      const body = { asset, amount, chain, recipient, confidential: true };
+      const preview = await bot.withdraw(agentId, { ...body, dry: true });
+      show({ preview: preview.quote ?? null, fee: preview.fee ?? null, warnings: (preview.warnings ?? []).map((w) => w.code) });
+      if (!execute) return;
+      if (preview.warnings?.length) throw new Error('the preview has warnings; nothing was withdrawn');
+      const started = await bot.withdraw(agentId, { ...body, async: true }, { idempotencyKey: createIdempotencyKey() });
+      const final = await waitForStatus(api, started.correlation_id, 900_000);
+      const d = final.details ?? {};
+      show({ correlation_id: final.correlation_id, status: final.status, failure_code: final.failure_code, amount_out: d.amount_out ?? null, tx_hash: d.tx_hash ?? null, destination_tx_hash: d.destination_tx_hash ?? null });
+      return;
+    }
     case 'quote': {
       const api = agentApi(env);
       const agentId = required(env, 'WAKELESS_AGENT_ID');
@@ -126,7 +170,10 @@ async function main() {
       return;
     }
     default:
-      console.log('commands: owner | create | grant | status | deposit <asset> [amount] | shield <asset> <amount> | quote <from> <to> <amount>');
+      console.log(
+        'commands: owner | create | grant | status | deposit <asset> [amount] | shield <asset> <amount> | ' +
+          'allow-withdraw <chain> <address> | withdraw <asset> <amount> <chain> <address> [--execute] | quote <from> <to> <amount>',
+      );
   }
 }
 
