@@ -11,11 +11,17 @@ export const orderClock = (ms) => {
 
 const short = (hash) => (hash && hash.length > 16 ? `${hash.slice(0, 8)}...${hash.slice(-6)}` : hash);
 
+/** Like fmt, but amounts under 1 keep three significant digits instead of rounding to zero. */
+const qty = (value, digits = 2) => {
+  if (value === 0 || Math.abs(value) >= 1) return fmt(value, digits);
+  return fmt(value, Math.min(10, Math.max(digits, 2 - Math.floor(Math.log10(Math.abs(value))))));
+};
+
 /** @returns {string|null} the line to print for `event`, or null to stay quiet. */
 export function describeEvent(event, order, speed = 1) {
   switch (event.type) {
     case 'order':
-      return `Order ${order.id}: sell ${fmt(Number(order.amount), 2)} ${order.sell.symbol} (${order.sell.blockchain}) for ${order.buy.symbol} (${order.buy.blockchain}) ` +
+      return `Order ${order.id}: sell ${qty(Number(order.amount), 2)} ${order.sell.symbol} (${order.sell.blockchain}) for ${order.buy.symbol} (${order.buy.blockchain}) ` +
         `in ${order.slices} slices over ${orderClock(order.horizonMs)} of order time. Seed ${event.seed}, ${event.mode} run, speed x${speed}.`;
     case 'arrival': {
       const p = event.probe.q;
@@ -28,7 +34,7 @@ export function describeEvent(event, order, speed = 1) {
     }
     case 'slice': {
       const q = event.quote.q;
-      const size = `${fmt(Number(fromUnits(BigInt(event.slice.amount), order.sell.decimals)), 2)} ${order.sell.symbol}`;
+      const size = `${qty(Number(fromUnits(BigInt(event.slice.amount), order.sell.decimals)), 2)} ${order.sell.symbol}`;
       const price = q.ok ? `rate ${q.rate.toPrecision(6)}, cost ${fmt(q.costBps, 1)} bps` : q.message;
       return `[${orderClock(event.t)}] slice ${event.slice.id.padEnd(4)} ${size.padStart(18)}  ${price}  -> ${event.decision.action} (${event.decision.reason})`;
     }

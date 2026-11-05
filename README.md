@@ -115,11 +115,13 @@ only numbers taken at the same moment are compared.
   4.4 bps more SOL than public quotes taken at the same moment, from $1,000 to
   $250,000
   ([raw quotes](research/confidential/usdc-arb_sol-sol_2026-11-05t03-37-19-519z.json)).
-- Live mode (in progress, see below) runs on the NEAR Intents Agent API: an
-  agent account whose owner-signed policy lets it swap and nothing else. The
-  desk sends every swap in confidential form.
+- Live mode runs on the NEAR Intents Agent API: an agent account whose
+  owner-signed policy lets it swap and pay the owner's wallet, nothing else.
+  The desk sends every swap in confidential form. In the live run below, four
+  slices settled while the public `intents.near` ledger showed a zero balance
+  for the agent.
 
-## Live mode (in progress)
+## Live mode
 
 Live mode runs the desk through an agent account on the NEAR Intents Agent
 API. The owner signs one policy, and the API enforces it on every action the
@@ -210,7 +212,33 @@ Live: `node live/run.mjs <order.json> --live --confirm`. It refuses to start
 unless the agent's confidential balance covers the order. To fund it,
 `node live/agent.mjs deposit <asset> <amount>` asks for a deposit address with
 `confidential: true`, and `node live/agent.mjs shield <asset> <amount>` moves a
-public balance over. Not done yet: a funded live run.
+public balance over.
+
+### The live run, 5 November 2026
+
+0.0025 ETH on Base (about $6) went to the agent's confidential deposit address
+and was worked into SOL with
+`node live/run.mjs examples/live-eth-base-to-sol.json --live --confirm --speed 2`:
+
+- All 4 slices settled (`SUCCESS`), each at or above its floor, for
+  0.062710 SOL in total. Each settlement landed between -23.0 and +0.9 bps of
+  the agent's own preview for that slice, inside the 1% slippage tolerance.
+- [examples/live-run.md](examples/live-run.md) is the report and
+  `examples/live-run.jsonl` the journal, with the four intent hashes.
+- At $6 there is no price impact to avoid, so the slices received 15.5 bps
+  less SOL than one swap was quoted at arrival. The run shows the live path
+  working; the $500,000 dry run above is the size where slicing pays.
+
+What the chain shows for the agent afterwards:
+
+**Do** `node live/public-view.mjs 0d54a875b32c4ad1668c3e86e807ab28905133c93e1daae19653decaedea079f`.
+**See** the agent's balances on the public `intents.near` ledger: 0 SOL and
+0 ETH (block 223137273), while the Agent API reported 62,710,076 base units of
+SOL (0.062710076) in the agent's confidential balance at the same time. The
+public column needs no keys. nearblocks.io listed no transactions for the
+account, and the API returned no public transaction hash for the four swaps,
+only intent hashes. What is public is the way in, the ETH transfer on Base to
+the deposit address, and later the way out to the owner's wallet.
 
 ## Limits of the dry run
 
@@ -239,7 +267,8 @@ public balance over. Not done yet: a funded live run.
 | `live/run.mjs` | Works an order through the agent, preview or live |
 | `live/executor.mjs` | Submits a slice as a confidential swap with the floor as minimum output |
 | `live/quote-client.mjs` | The agent's swap preview as the price source |
-| `examples/` | Example orders, a committed dry run and an agent preview run |
+| `live/public-view.mjs` | The agent's public `intents.near` balances, next to its confidential ones |
+| `examples/` | Example orders, a committed dry run, an agent preview run and the live run |
 | `research/impact/` | Raw price impact snapshots |
 
 ## Related work

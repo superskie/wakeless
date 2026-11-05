@@ -119,6 +119,10 @@ export function buildReport(events) {
       status: f.status,
       txHashes: f.txHashes ?? [],
       warnings: f.details?.warnings ?? [],
+      vsQuoteBps:
+        f.quotedAmountOut != null && BigInt(f.quotedAmountOut) > 0n
+          ? (Number(BigInt(f.amountOut)) / Number(BigInt(f.quotedAmountOut)) - 1) * 10_000
+          : null,
     })),
     misses: misses.map((m) => ({
       slice: m.sliceId,
@@ -163,7 +167,13 @@ const clock = (ms) => {
   const s = Math.round(ms / 1000);
   return `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
 };
-const amount = (text, digits) => num(Number(text), digits);
+// Amounts under 1 keep three significant digits instead of rounding to zero.
+const amount = (text, digits) => {
+  const v = Number(text);
+  if (v === 0 || Math.abs(v) >= 1) return num(v, digits);
+  return num(v, Math.min(10, Math.max(digits, 2 - Math.floor(Math.log10(Math.abs(v))))));
+};
+const usd = (value) => (value == null ? '-' : `${value < 0 ? '-' : ''}$${num(Math.abs(value), 2)}`);
 
 /** Markdown rendering of buildReport output. */
 export function renderReport(r) {
@@ -206,17 +216,31 @@ export function renderReport(r) {
   if (o.executable) {
     lines.push(
       `- Quoted cost ${num(o.costBps, 1)} bps, ${num(o.outForFilled, 6)} ${r.buy.symbol} for the filled amount.`,
-      `- Slicing received ${signed(o.deltaBuy, 6)} ${r.buy.symbol} (${signed(o.deltaBps)} bps, about $${num(o.deltaUsd, 2)} at the arrival price), market move included.`,
+      `- Slicing received ${signed(o.deltaBuy, 6)} ${r.buy.symbol} (${signed(o.deltaBps)} bps, about ${usd(o.deltaUsd)} at the arrival price), market move included.`,
     );
     if (!r.costs.referenceStatic) lines.push(`- Execution cost avoided, market move excluded: ${signed(o.executionSavingsBps)} bps.`);
+    if (r.mode === 'live') {
+      lines.push(
+        '- In a live run each fill is a settlement while the one-shot alternative is only a quote, and settlements can land ' +
+          'below their quotes inside the slippage tolerance ("vs quote" below), so this comparison leans against slicing.',
+      );
+    }
     lines.push('');
   } else {
     lines.push(`- Not executable as one swap: ${o.message}.`, '');
   }
 
-  lines.push('| Slice | Order time | Sold | Received | Rate | Cost bps | Status |', '| --- | --- | ---: | ---: | ---: | ---: | --- |');
+  // Live fills also show how far each settlement landed from its own quote.
+  const live = r.mode === 'live';
+  lines.push(
+    `| Slice | Order time | Sold | Received | Rate | Cost bps |${live ? ' vs quote bps |' : ''} Status |`,
+    `| --- | --- | ---: | ---: | ---: | ---: |${live ? ' ---: |' : ''} --- |`,
+  );
   for (const f of r.fills) {
-    lines.push(`| ${f.slice} | ${clock(f.t)} | ${amount(f.sold, 2)} | ${amount(f.got, 6)} | ${f.rate.toPrecision(6)} | ${num(f.costBps, 1)} | ${f.status} |`);
+    lines.push(
+      `| ${f.slice} | ${clock(f.t)} | ${amount(f.sold, 2)} | ${amount(f.got, 6)} | ${f.rate.toPrecision(6)} | ${num(f.costBps, 1)} |` +
+        `${live ? ` ${signed(f.vsQuoteBps)} |` : ''} ${f.status} |`,
+    );
   }
   const referenced = r.fills.filter((f) => f.txHashes.length);
   if (referenced.length) {
