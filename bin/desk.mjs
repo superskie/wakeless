@@ -208,13 +208,22 @@ async function cmdCheck(client, hasKey) {
   const sell = resolveAsset(tokens, 'usdc:arb');
   const buy = resolveAsset(tokens, 'sol:sol');
   const amount = toUnits('1000', sell.decimals);
+  // Dry quotes never move funds, but 1Click still validates addresses. The
+  // refund address is a hash of a fixed string, so nobody holds its key; the
+  // recipient is the Solana incinerator.
+  const placeholders = {
+    depositType: 'ORIGIN_CHAIN',
+    refundType: 'ORIGIN_CHAIN',
+    refundTo: '0xc8832de6afbdb1ffd086302a9b24703ee61fb27c',
+    recipientType: 'DESTINATION_CHAIN',
+    recipient: '1nc1nerator11111111111111111111111111111111',
+  };
   const cases = [
     ['public swap inside NEAR Intents', {}],
-    ['confidential swap inside NEAR Intents', {
-      depositType: 'CONFIDENTIAL_INTENTS',
-      refundType: 'CONFIDENTIAL_INTENTS',
-      recipientType: 'CONFIDENTIAL_INTENTS',
-    }],
+    // The foreign-to-foreign path from the Confidential Swaps quickstart: a
+    // partner key is enough. Swaps between Confidential Intents balances also
+    // need a signed user intent, which live mode gets through the Agent API.
+    ['confidential swap, Arbitrum to Solana', { ...placeholders, confidentiality: 'basic' }],
   ];
   for (const [label, extra] of cases) {
     const body = { ...intentsQuoteBody({ sellAsset: sell.assetId, buyAsset: buy.assetId, amount, account: 'dry-run.desk.near' }), ...extra };
