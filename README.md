@@ -101,6 +101,12 @@ only numbers taken at the same moment are compared.
   (`GET /v0/tokens`, 5 November 2026), so the same desk works any pair.
 - Slices settle between NEAR Intents balances instead of as separate
   cross-chain transfers: one deposit in, one withdrawal out.
+- Confidential Intents settlement has no measured price premium. On
+  5 November 2026 at 03:37 UTC, confidential dry quotes (`basic` and
+  `advanced`) for USDC on Arbitrum to SOL on Solana returned the same or up to
+  4.4 bps more SOL than public quotes taken at the same moment, from $1,000 to
+  $250,000
+  ([raw quotes](research/confidential/usdc-arb_sol-sol_2026-11-05t03-37-19-519z.json)).
 - Live mode (in progress, see below) runs on the NEAR Intents Agent API with
   Confidential Intents.
 
