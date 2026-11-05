@@ -13,11 +13,12 @@ import { realClock } from '../src/clock.mjs';
 import { fileJournal, readJournal } from '../src/journal.mjs';
 import { buildReport, renderReport } from '../src/report.mjs';
 import { mulberry32 } from '../src/rng.mjs';
-import { fromUnits } from '../src/units.mjs';
+import { fromUnits, toUnits } from '../src/units.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const USAGE = `Usage:
+  desk check
   desk impact --from <asset> --to <asset> [--usd 100,1000,10000] [--no-save]
   desk run <order.json> [--speed <n>] [--seed <n>] [--journal <file>]
   desk report <journal.jsonl> [--json]
@@ -174,10 +175,64 @@ function cmdReport(args) {
   else process.stdout.write(renderReport(report));
 }
 
+/**
+ * Load KEY=value lines from a .env file without overriding the environment.
+ * Accepts UTF-8 with or without BOM and UTF-16 LE, which Windows editors
+ * sometimes write.
+ */
+function loadDotEnv(file) {
+  let buf;
+  try {
+    buf = fs.readFileSync(file);
+  } catch (err) {
+    if (err.code === 'ENOENT') return;
+    throw err;
+  }
+  const text = buf[0] === 0xff && buf[1] === 0xfe ? buf.toString('utf16le') : buf.toString('utf8');
+  for (const raw of text.replace(/^\uFEFF/, '').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq < 1) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if (/^(['"]).*\1$/.test(value)) value = value.slice(1, -1);
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+}
+
+/** Does the partner key work? Prints statuses only, never the key. */
+async function cmdCheck(client, hasKey) {
+  console.log(`Partner key: ${hasKey ? 'set (ONECLICK_API_KEY)' : 'not set; add it to .env for confidential quotes'}`);
+  const tokens = await loadTokens(client);
+  const sell = resolveAsset(tokens, 'usdc:arb');
+  const buy = resolveAsset(tokens, 'sol:sol');
+  const amount = toUnits('1000', sell.decimals);
+  const cases = [
+    ['public swap inside NEAR Intents', {}],
+    ['confidential swap inside NEAR Intents', {
+      depositType: 'CONFIDENTIAL_INTENTS',
+      refundType: 'CONFIDENTIAL_INTENTS',
+      recipientType: 'CONFIDENTIAL_INTENTS',
+    }],
+  ];
+  for (const [label, extra] of cases) {
+    const body = { ...intentsQuoteBody({ sellAsset: sell.assetId, buyAsset: buy.assetId, amount, account: 'dry-run.desk.near' }), ...extra };
+    const res = await client.quote(body);
+    const q = normalizeQuote(res, { sellDecimals: sell.decimals, buyDecimals: buy.decimals, amountIn: amount });
+    const detail = q.ok ? `ok, $1,000 USDC to SOL costs ${fmt(q.costBps, 1)} bps` : q.message;
+    console.log(`${label.padEnd(40)} HTTP ${res.status}  ${detail}`);
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const client = createOneClick({ apiKey: process.env.ONECLICK_API_KEY || undefined });
+  loadDotEnv(path.join(ROOT, '.env'));
+  const apiKey = process.env.ONECLICK_API_KEY?.trim() || undefined;
+  const client = createOneClick({ apiKey });
   switch (args._[0]) {
+    case 'check':
+      return cmdCheck(client, Boolean(apiKey));
     case 'impact':
       return cmdImpact(args, client);
     case 'run':
