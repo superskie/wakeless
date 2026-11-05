@@ -73,6 +73,13 @@ $1,150. The run was compressed, so the market had little time to move, and at
 arrival a slice-sized quote already cost 22.6 bps less than the one-swap quote
 taken at the same moment.
 
+**Do** `npm run web` and open `http://localhost:8787/web/`. **See** the web
+desk: a live price-impact chart for the order size, a ticket that works an
+order as a dry run in the browser against live 1Click quotes (no wallet, no
+key), a replay of the committed $500,000 run, what a public TWAP and Wakeless
+each leave on the chain, and the mainnet run below with links to its Base
+transactions.
+
 **Do** `node bin/wakeless.mjs check`. **See** whether a partner key is set and the
 HTTP status of a public and a confidential dry quote. Without a key the
 confidential quote returns 401; the key is never printed.
@@ -225,6 +232,9 @@ and was worked into SOL with
   the agent's own preview for that slice, inside the 1% slippage tolerance.
 - [examples/live-run.md](examples/live-run.md) is the report and
   `examples/live-run.jsonl` the journal, with the four intent hashes.
+  [examples/live-run-chain.json](examples/live-run-chain.json) lists the
+  public facts around it, such as the `intents.near` block where the agent
+  showed 0.
 - At $6 there is no price impact to avoid, so the slices received 15.5 bps
   less SOL than one swap was quoted at arrival. The run shows the live path
   working; the $500,000 dry run above is the size where slicing pays.

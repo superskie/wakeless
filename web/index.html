@@ -49,6 +49,7 @@
     <nav class="topnav" aria-label="Sections">
       <a href="#desk">Desk</a>
       <a href="#chain">What the chain sees</a>
+      <a href="#live">Live run</a>
       <a href="https://github.com/superskie/wakeless" rel="noopener">Source</a>
     </nav>
   </header>
@@ -206,10 +207,10 @@
         <article class="card quiet">
           <header>
             <h3>Wakeless, live mode</h3>
-            <span class="badge progress">In progress</span>
+            <a class="badge quiet" href="#live">Ran on mainnet</a>
           </header>
           <ol class="ledger" id="ledger-wakeless"></ol>
-          <p class="note">Confidential Intents hides balances and transfers between the deposit and the withdrawal, and the two can not be matched to each other. Live mode runs on the NEAR Intents Agent API: the agent can only swap and pay back to its owner.</p>
+          <p class="note">The deposit and the withdrawal are public. Everything between them, every slice and balance, settles in Confidential Intents and stays off the public ledger. Live mode runs on the NEAR Intents Agent API: the agent can only swap and pay its owner back.</p>
         </article>
       </div>
 
@@ -223,6 +224,30 @@
           <thead><tr><th>Order</th><th>Public</th><th>Confidential</th><th>Difference</th></tr></thead>
           <tbody></tbody>
         </table>
+      </div>
+    </section>
+
+    <section class="live" id="live">
+      <div class="section-head">
+        <h2>Live on <em>mainnet</em></h2>
+        <p id="live-summary">Loading the committed live run.</p>
+      </div>
+      <div class="live-grid card">
+        <div class="live-path">
+          <h3>What the public saw</h3>
+          <ol class="ledger" id="live-ledger"></ol>
+          <p class="live-check" id="live-proof"></p>
+        </div>
+        <div class="live-fills">
+          <h3>Four slices, settled</h3>
+          <div class="table-scroll">
+            <table class="privacy-table live-table" id="live-table">
+              <thead><tr><th>Slice</th><th>Sold, ETH</th><th>Received, SOL</th><th>vs preview</th><th class="hash">Intent hash</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p class="fineprint" id="live-note"></p>
+        </div>
       </div>
     </section>
   </main>

@@ -1,0 +1,24 @@
+{
+  "about": "Public chain facts around the live run in examples/live-run.jsonl, 5 November 2026. Every value can be checked on NEAR mainnet.",
+  "network": "mainnet",
+  "agent": {
+    "nearAccount": "0d54a875b32c4ad1668c3e86e807ab28905133c93e1daae19653decaedea079f",
+    "api": "https://api.demo.agentsonintents.com",
+    "policy": "swap and withdraw, withdrawals only to the owner's wallet, confidential form allowed, $250 a day"
+  },
+  "deposit": {
+    "chain": "base",
+    "asset": "ETH",
+    "amount": "0.0025",
+    "landedIn": "confidential balance"
+  },
+  "publicLedger": {
+    "contract": "intents.near",
+    "method": "mt_batch_balance_of",
+    "block": 223137273,
+    "balances": { "nep141:sol.omft.near": "0", "nep141:base.omft.near": "0" },
+    "confidentialAtTheSameTime": { "nep141:sol.omft.near": "62710076" },
+    "check": "node live/public-view.mjs 0d54a875b32c4ad1668c3e86e807ab28905133c93e1daae19653decaedea079f --block 223137273"
+  },
+  "afterTheRun": "The SOL was swapped back to ETH and withdrawn on Base to the owner's wallet. The deposit and withdrawal transactions are left out on purpose: they would name the owner's wallet."
+}

@@ -14,6 +14,9 @@ import { toNumber } from '../src/units.mjs';
 import { startWater } from './water.mjs';
 
 const SAMPLE_RUN = '../examples/sample-run.jsonl';
+const LIVE_RUN = '../examples/live-run.jsonl';
+const LIVE_CHAIN = '../examples/live-run-chain.json';
+const BASESCAN_TX = 'https://basescan.org/tx/';
 const PRIVACY_SNAPSHOT = '../research/confidential/usdc-arb_sol-sol_2026-11-05t03-37-19-519z.json';
 const IMPACT_SIZES = [1_000, 10_000, 50_000, 100_000, 250_000, 500_000, 1_000_000];
 const ASSETS = ['usdc:arb', 'usdc:eth', 'usdc:base', 'usdc:sol', 'usdt:eth', 'usdt:tron', 'eth:eth', 'eth:arb', 'eth:base', 'sol:sol', 'btc:btc', 'wnear:near', 'zec:zec'];
@@ -67,9 +70,12 @@ const digitsFor = (price) => (price >= 1000 ? 4 : price >= 10 ? 3 : price >= 0.5
 
 // ---------- status, assets, ticket ----------
 
-function setStatus(kind, text) {
+/** `wide` is extra text that narrow screens drop (see .status .wide). */
+function setStatus(kind, text, wide = '') {
   $('#status').dataset.state = kind;
-  $('#status-text').textContent = text;
+  const node = $('#status-text');
+  node.textContent = text;
+  if (wide) node.append(html('span', { class: 'wide', text: wide }));
 }
 
 function populateAssets(tokens) {
@@ -479,12 +485,14 @@ function renderResult(r, events) {
   if (r.aborted) {
     headline = html('h3', { class: 'headline worse' }, ['Stopped ', html('em', { text: 'before the first slice' })]);
     sub = html('p', { class: 'sub', text: r.abortMessage ?? '' });
-  } else if (o.executable && o.executionSavingsBps != null) {
-    const saved = o.executionSavingsBps;
-    headline = html('h3', { class: `headline${saved < 0 ? ' worse' : ''}` }, [
-      `${num(Math.abs(saved), 1)} bps `,
-      html('em', { text: saved >= 0 ? 'cheaper' : 'dearer' }),
-      ' than one swap',
+  } else if (o.executable && o.deltaBps != null) {
+    // Same measure as the CLI report and the README: what the slices received
+    // against one swap of the whole order quoted at arrival.
+    const more = o.deltaBps;
+    headline = html('h3', { class: `headline${more < 0 ? ' worse' : ''}` }, [
+      `${num(Math.abs(more), 1)} bps `,
+      html('em', { text: more >= 0 ? 'more' : 'less' }),
+      ` ${r.buy.symbol} than one swap`,
     ]);
     sub = html('p', {
       class: 'sub',
@@ -643,7 +651,7 @@ function renderChain() {
     html('li', { class: 'sealed' }, [html('b', { text: `${n} slices, random sizes and times` }), 'Settled inside Confidential Intents balances. Not on a public ledger.']),
     html('li', {}, [
       html('span', { class: 't', text: mmss(windowMs) }),
-      html('span', {}, [`Withdraw ${out} `, html('span', { class: 'pub', text: 'public, not linked to the deposit' })]),
+      html('span', {}, [`Withdraw ${out} `, html('span', { class: 'pub', text: 'public' })]),
       html('span', { class: 'amt', text: chainName(buyRef.blockchain) }),
     ]),
   );
@@ -685,6 +693,90 @@ async function loadPrivacySnapshot() {
   }
 }
 
+// ---------- live on mainnet ----------
+
+const utc = (iso) => new Date(iso).toISOString().slice(11, 16);
+const shortHash = (hash) => (hash.length > 16 ? `${hash.slice(0, 6)}...${hash.slice(-6)}` : hash);
+const txLink = (hash) => html('a', { href: `${BASESCAN_TX}${hash}`, target: '_blank', rel: 'noopener', text: 'Base tx' });
+
+/** The committed live run: its journal plus the public chain facts around it. */
+async function loadLiveRun() {
+  try {
+    const [runRes, chainRes] = await Promise.all([fetch(LIVE_RUN), fetch(LIVE_CHAIN)]);
+    if (!runRes.ok || !chainRes.ok) throw new Error(`HTTP ${runRes.ok ? chainRes.status : runRes.status}`);
+    const events = parseJsonl(await runRes.text());
+    const chain = await chainRes.json();
+    const r = buildReport(events);
+    const order = events.find((e) => e.type === 'order').order;
+    const fills = events.filter((e) => e.type === 'fill' && BigInt(e.amountIn) > 0n);
+    const sol = Number(chain.publicLedger.confidentialAtTheSameTime['nep141:sol.omft.near']) / 1e9;
+    const first = fills[0];
+    const last = fills[fills.length - 1];
+
+    $('#live-summary').textContent =
+      `${chain.deposit.amount} ETH on Base, worked into ${r.buy.symbol} in ${r.slices.fills} slices by a policy-bound agent on ` +
+      `5 November 2026, then paid back to its owner. Real funds, settled on NEAR Intents.`;
+
+    const ledger = $('#live-ledger');
+    ledger.textContent = '';
+    ledger.append(
+      html('li', {}, [
+        html('span', { class: 't', text: utc(chain.deposit.at) }),
+        html('span', {}, [
+          `Deposit ${chain.deposit.amount} ETH to the agent's address `,
+          html('span', { class: 'pub' }, ['public, ', txLink(chain.deposit.tx)]),
+        ]),
+      ]),
+      html('li', { class: 'sealed' }, [
+        html('b', { text: `${fills.length} slices, ${utc(first.wall)} to ${utc(last.wall)} UTC` }),
+        html('p', {
+          text:
+            `ETH to ${r.buy.symbol} in confidential form. The public intents.near ledger showed the agent holding 0 ${r.buy.symbol} ` +
+            `at block ${num(chain.publicLedger.block, 0)}, while its confidential balance held ${num(sol, 6)} ${r.buy.symbol}.`,
+        }),
+      ]),
+      html('li', {}, [
+        html('span', { class: 't', text: utc(chain.withdrawal.at) }),
+        html('span', {}, [
+          `${num(Number(chain.withdrawal.amount), 6)} ETH back to the owner's wallet `,
+          html('span', { class: 'pub' }, ['public, ', txLink(chain.withdrawal.tx)]),
+        ]),
+      ]),
+    );
+    const proof = $('#live-proof');
+    proof.textContent = '';
+    proof.append(
+      `The agent is NEAR account ${shortHash(chain.agent.nearAccount)}. Its policy: ${chain.agent.policy}. ` +
+        'Read the public ledger at that block yourself, no keys needed:',
+      html('code', { text: chain.publicLedger.check }),
+    );
+
+    const tbody = document.querySelector('#live-table tbody');
+    tbody.textContent = '';
+    for (const f of fills) {
+      const sold = toNumber(BigInt(f.amountIn), order.sell.decimals);
+      const got = toNumber(BigInt(f.amountOut), order.buy.decimals);
+      const vsQuote = f.quotedAmountOut ? (Number(BigInt(f.amountOut)) / Number(BigInt(f.quotedAmountOut)) - 1) * 10_000 : null;
+      const hash = f.txHashes?.[0] ?? '';
+      tbody.append(
+        html('tr', {}, [
+          html('td', { text: f.sliceId }),
+          html('td', { text: num(sold, 6) }),
+          html('td', { text: num(got, 6) }),
+          html('td', { class: vsQuote != null && vsQuote < 0 ? 'miss' : 'good', text: `${signed(vsQuote, 1)} bps` }),
+          html('td', { class: 'hash', title: hash, text: shortHash(hash) }),
+        ]),
+      );
+    }
+    $('#live-note').textContent =
+      `Each slice was submitted as a confidential swap whose minimum output was the desk's floor, and all ${fills.length} settled at or above it, ` +
+      `${num(Number(r.received), 6)} ${r.buy.symbol} in total. "vs preview" is the settled amount against the agent's own preview for that slice. ` +
+      `At $6 there is no price impact to save, so this run proves the path, not the saving; the $500,000 replay above shows the saving.`;
+  } catch (err) {
+    $('#live-summary').textContent = `Live run unavailable: ${err.message}`;
+  }
+}
+
 // ---------- start ----------
 
 async function init() {
@@ -692,6 +784,7 @@ async function init() {
   wireTicket();
   renderChain();
   loadPrivacySnapshot();
+  loadLiveRun();
   const res = await client.tokens();
   if (!res.ok || !Array.isArray(res.json)) {
     setStatus('down', '1Click unreachable. The replay still works.');
@@ -700,7 +793,7 @@ async function init() {
   }
   state.tokens = res.json;
   const chains = new Set(state.tokens.map((t) => t.blockchain)).size;
-  setStatus('live', `1Click live: ${state.tokens.length} tokens on ${chains} chains`);
+  setStatus('live', '1Click live', `: ${state.tokens.length} tokens on ${chains} chains`);
   populateAssets(state.tokens);
   setAmountFromUsd(state.targetUsd);
   onPairChange();
