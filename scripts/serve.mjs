@@ -6,7 +6,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// --root site serves the hosted build from scripts/build-site.mjs instead.
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const rootAt = process.argv.indexOf('--root');
+const ROOT = rootAt >= 0 ? path.resolve(REPO, process.argv[rootAt + 1]) : REPO;
 const PORT = Number(process.env.PORT) || 8787;
 const ALLOWED = new Set(['web', 'src', 'examples', 'research']);
 const TYPES = {

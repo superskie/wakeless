@@ -1,5 +1,6 @@
 node_modules/
 journals/
+site/
 .env
 .env.*
 !.env.example
