@@ -1,0 +1,11 @@
+{
+  "id": "usdc-arb-to-sol",
+  "sell": "usdc:arb",
+  "buy": "sol:sol",
+  "amount": "500000",
+  "slices": 16,
+  "horizonMinutes": 30,
+  "maxAdverseBps": 40,
+  "maxDefers": 2,
+  "minSliceUsd": 1000
+}

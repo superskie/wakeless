@@ -1,0 +1,19 @@
+{
+  "name": "dark-algo-desk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Work a large cross-chain order in randomized slices through NEAR Intents, settled confidentially.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "desk": "bin/desk.mjs"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "demo": "node bin/desk.mjs run examples/usdc-arb-to-sol.json --speed 40",
+    "impact": "node bin/desk.mjs impact --from usdc:arb --to sol:sol --usd 1000,10000,50000,100000,250000,500000,1000000"
+  }
+}
