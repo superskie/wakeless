@@ -278,17 +278,36 @@ the deposit address, and later the way out to the owner's wallet.
 
 ## Related work
 
-- [Stillwater](https://stillwater.finance): a sealed order pool on Solana.
-  Orders are committed as hashes, revealed in short sessions and cleared
-  together at one price against the other orders in the pool.
-- [Sotto Systems](https://sottosystems.xyz): orders encrypted in the client
-  stay unreadable until a drand timelock round opens their epoch, on Robinhood
-  Chain.
+Splitting an order over time and executing privately both exist on their
+own. Searching GitHub and the web on 5 November 2026, we did not find the two
+combined across chains on NEAR Intents.
 
-Both protect an order inside one venue on one chain. Wakeless works across
-chains on the liquidity of the NEAR Intents solvers that quote every slice,
-hides the order's shape by randomizing it and, in live mode, settles inside
-Confidential Intents.
+- Public TWAP: CoW Swap TWAP orders, Jupiter Recurring on Solana and
+  Hyperliquid's native TWAP split an order over time inside their own venue,
+  and every child order is public.
+- Private TWAP: [`Sednaoui/private-twap`](https://github.com/Sednaoui/private-twap)
+  (2021) prototyped TWAP swaps through Aztec Connect on Ethereum.
+  [Meridian](https://ethglobal.com/showcase/meridian-1x2ef) (ETHGlobal) is a
+  treasury agent that converts USDC to EURC on Base in TWAP chunks, with
+  Unlink's ZK privacy pool hiding the treasury's identity in its private mode.
+  Both work on one chain.
+- Sealed orders: [Stillwater](https://stillwater.finance) (a sealed order pool
+  on Solana), [Sotto Systems](https://sottosystems.xyz) (drand-timelocked
+  orders cleared in uniform-price batch auctions on an EVM chain) and
+  [Orcus](https://github.com/HoomanBuilds/orcus) (intents decrypted only inside
+  a TEE, settled on EVM testnets and Sui) protect one order at a time inside
+  their own venue.
+- NEAR Intents itself offers confidential limit orders through 1Click; on
+  5 November 2026 its `orderType` accepted `LIMIT` only.
+- The DeFi track brief suggests a cross-chain DCA vault: swaps on a schedule,
+  each delivered to the user's address on the target chain, to average a
+  price. Wakeless works one large order over minutes to hours to cut its price
+  impact, randomizes the slices and settles them confidentially, so the
+  schedule leaves no public trail.
+
+Wakeless works across chains on the liquidity of the NEAR Intents solvers,
+hides the order's shape by randomizing it, settles every slice confidentially,
+and runs as an agent whose policy lets it only swap and pay its owner back.
 
 ## Built with
 
