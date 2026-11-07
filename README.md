@@ -94,10 +94,11 @@ worse rates than the first (20.7 bps rising to 25.0 bps). The saving is the
 size penalty the slices avoid, so it follows the day's liquidity, and
 `npm run demo` will print its own number for the market you run it in.
 
-**Do** `npm run web` and open `http://localhost:8787/web/`. **See** the web
-desk: a live price-impact chart for the order size, a ticket that works an
-order as a dry run in the browser against live 1Click quotes (no wallet, no
-key), a replay of the committed $500,000 run, what a public TWAP and Wakeless
+**Do** open https://wakeless.pages.dev, or run `npm run web` and open
+`http://localhost:8787/web/`. **See** the web desk: a live price-impact chart
+for the order size, a ticket that works an order as a dry run in the browser
+against live 1Click quotes (no wallet, no key), replays of the two committed
+$500,000 runs, what a public TWAP and Wakeless
 each leave on the chain, and the mainnet run below with links to its Base
 transactions.
 
