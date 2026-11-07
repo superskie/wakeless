@@ -13,7 +13,12 @@ import { memoryJournal, parseJsonl, toJsonl } from '../src/memory-journal.mjs';
 import { toNumber } from '../src/units.mjs';
 import { startWater } from './water.mjs';
 
-const SAMPLE_RUN = '../examples/sample-run.jsonl';
+// Two committed $500k runs of the same order: a thin market and a deeper one.
+const SAMPLE_RUNS = {
+  replay: '../examples/sample-run.jsonl',
+  'replay-top': '../examples/sample-run.jsonl',
+  'replay-deep': '../examples/sample-run-2026-11-07.jsonl',
+};
 const LIVE_RUN = '../examples/live-run.jsonl';
 const LIVE_CHAIN = '../examples/live-run-chain.json';
 const BASESCAN_TX = 'https://basescan.org/tx/';
@@ -153,7 +158,7 @@ function setBusy(busy, label) {
   run.classList.toggle('busy', busy);
   run.disabled = busy;
   run.querySelector('.run-label').textContent = busy ? label : 'Work this order';
-  for (const id of ['#replay', '#replay-top']) $(id).disabled = busy;
+  for (const id of Object.keys(SAMPLE_RUNS)) $(`#${id}`).disabled = busy;
 }
 
 function wireTicket() {
@@ -161,7 +166,7 @@ function wireTicket() {
     event.preventDefault();
     runLive();
   });
-  for (const id of ['#replay', '#replay-top']) $(id).addEventListener('click', replay);
+  for (const [id, file] of Object.entries(SAMPLE_RUNS)) $(`#${id}`).addEventListener('click', () => replay(file));
   $('#sell').addEventListener('change', () => {
     setAmountFromUsd(state.targetUsd);
     onPairChange();
@@ -584,13 +589,13 @@ async function runLive() {
   }
 }
 
-async function replay() {
+async function replay(file) {
   if (state.busy) return;
   showError('');
   setBusy(true, 'Replaying');
   scrollToDesk();
   try {
-    const res = await fetch(SAMPLE_RUN);
+    const res = await fetch(file);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const events = parseJsonl(await res.text());
     const speed = currentSpeed();
