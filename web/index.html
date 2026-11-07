@@ -117,7 +117,7 @@
         <div class="two">
           <label class="field">
             <span class="field-label">Slices <output id="slices-out">16</output></span>
-            <input type="range" id="slices" min="4" max="32" step="1" value="16">
+            <input type="range" id="slices" min="1" max="64" step="1" value="16">
           </label>
           <label class="field">
             <span class="field-label">Window</span>
@@ -142,6 +142,12 @@
           <label><input type="radio" name="speed" value="60" checked><span>x60</span></label>
           <label><input type="radio" name="speed" value="120"><span>x120</span></label>
         </fieldset>
+
+        <div class="precheck" id="precheck">
+          <button class="btn ghost small" type="button" id="precheck-run">Check this order first</button>
+          <span class="hint">Live quotes at several slice sizes: is slicing worth it right now, and into how many?</span>
+          <div id="precheck-out" aria-live="polite" hidden></div>
+        </div>
 
         <button class="btn primary big" id="run" type="submit">
           <span class="spinner" aria-hidden="true"></span>

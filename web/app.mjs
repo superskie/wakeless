@@ -7,6 +7,7 @@ import { runOrder } from '../src/engine.mjs';
 import { dryExecutor } from '../src/executors/dry.mjs';
 import { realClock } from '../src/clock.mjs';
 import { buildReport } from '../src/report.mjs';
+import { adviceText, precheck } from '../src/precheck.mjs';
 import { mulberry32 } from '../src/rng.mjs';
 import { resolveAsset } from '../src/assets.mjs';
 import { memoryJournal, parseJsonl, toJsonl } from '../src/memory-journal.mjs';
@@ -31,7 +32,7 @@ const DRY_ACCOUNT = 'dry-run.wakeless.near';
 const $ = (selector) => document.querySelector(selector);
 const SVG = 'http://www.w3.org/2000/svg';
 const client = createOneClick();
-const state = { tokens: null, busy: false, impactBusy: false, targetUsd: 500_000, lastRun: null };
+const state = { tokens: null, busy: false, impactBusy: false, precheckBusy: false, targetUsd: 500_000, lastRun: null };
 
 // ---------- small helpers ----------
 
@@ -159,6 +160,7 @@ function setBusy(busy, label) {
   run.disabled = busy;
   run.querySelector('.run-label').textContent = busy ? label : 'Work this order';
   for (const id of Object.keys(SAMPLE_RUNS)) $(`#${id}`).disabled = busy;
+  $('#precheck-run').disabled = busy || state.precheckBusy;
 }
 
 function wireTicket() {
@@ -182,11 +184,13 @@ function wireTicket() {
   $('#amount').addEventListener('input', () => {
     if (state.tokens) state.targetUsd = Number($('#amount').value) * selected('#sell').price || state.targetUsd;
     syncAmountHint();
+    clearPrecheck();
     renderChain();
   });
   for (const chip of document.querySelectorAll('#chips button')) {
     chip.addEventListener('click', () => {
       setAmountFromUsd(Number(chip.dataset.usd));
+      clearPrecheck();
       renderChain();
     });
   }
@@ -199,10 +203,12 @@ function wireTicket() {
     $('#adverse-out').textContent = `${$('#adverse').value} bps`;
   });
   $('#impact-refresh').addEventListener('click', measureImpact);
+  $('#precheck-run').addEventListener('click', runPrecheck);
 }
 
 function onPairChange() {
   showError('');
+  clearPrecheck();
   if (!state.tokens) return;
   const sell = selected('#sell');
   const buy = selected('#buy');
@@ -210,6 +216,92 @@ function onPairChange() {
   $('#impact-refresh').disabled = state.impactBusy;
   $('#impact-note').textContent = 'Pair changed. Press "Measure again" for live quotes on this pair.';
   renderChain();
+}
+
+// ---------- pre-trade check ----------
+
+function clearPrecheck() {
+  const out = $('#precheck-out');
+  if (!out || state.precheckBusy) return;
+  out.hidden = true;
+  out.textContent = '';
+  $('#precheck-run').textContent = 'Check this order first';
+}
+
+function setSlices(n) {
+  $('#slices').value = String(n);
+  $('#slices-out').textContent = String(n);
+  renderChain();
+}
+
+async function runPrecheck() {
+  if (state.busy || state.precheckBusy) return;
+  showError('');
+  if (!state.tokens) {
+    showError('1Click is not reachable right now.');
+    return;
+  }
+  let order;
+  try {
+    order = prepareOrder(currentSpec(), state.tokens);
+  } catch (err) {
+    showError(err.message);
+    return;
+  }
+  const out = $('#precheck-out');
+  const button = $('#precheck-run');
+  state.precheckBusy = true;
+  button.disabled = true;
+  out.hidden = false;
+  out.textContent = '';
+  const progress = html('p', { class: 'hint', text: 'Quoting a $1,000 reference swap.' });
+  out.append(progress);
+  try {
+    const result = await precheck({
+      order,
+      client,
+      maxSlices: Number($('#slices').max),
+      onRow: (row) => {
+        progress.textContent = `Quoted ${row.slices} slice${row.slices === 1 ? '' : 's'}.`;
+      },
+    });
+    renderPrecheck(result);
+  } catch (err) {
+    out.textContent = '';
+    out.append(html('p', { class: 'hint', text: `The check failed: ${err.message}` }));
+  } finally {
+    state.precheckBusy = false;
+    button.disabled = state.busy;
+    button.textContent = 'Check again';
+  }
+}
+
+function renderPrecheck(r) {
+  const out = $('#precheck-out');
+  out.textContent = '';
+  const each = (row) => (r.totalUsd ? `$${num(r.totalUsd / row.slices, 0)}` : '-');
+  const body = r.rows.map((row) =>
+    html('tr', row.slices === r.recommendedSlices ? { class: 'pick' } : {}, [
+      html('td', { text: String(row.slices) }),
+      html('td', { text: each(row) }),
+      html('td', { text: row.q.ok ? `${signed(Math.abs(row.penaltyBps) < 0.05 ? 0 : row.penaltyBps)} bps` : 'no quote' }),
+    ]),
+  );
+  out.append(
+    html('table', { class: 'privacy-table precheck-table' }, [
+      html('thead', {}, html('tr', {}, [html('th', { text: 'Slices' }), html('th', { text: 'Each' }), html('th', { text: `vs a $${num(r.referenceUsd, 0)} swap` })])),
+      html('tbody', {}, body),
+    ]),
+  );
+  out.append(html('p', { class: 'precheck-advice', text: adviceText(r) }));
+  if (r.recommendedSlices && r.recommendedSlices !== Number($('#slices').value)) {
+    const use = html('button', { class: 'btn small', type: 'button', text: `Use ${r.recommendedSlices} slice${r.recommendedSlices === 1 ? '' : 's'}` });
+    use.addEventListener('click', () => {
+      setSlices(r.recommendedSlices);
+      use.remove();
+    });
+    out.append(use);
+  }
 }
 
 // ---------- hero chart: price impact by size ----------

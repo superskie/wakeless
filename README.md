@@ -60,17 +60,29 @@ Needs Node 22 or later. No keys, no funds, no dependencies to install.
 git clone https://github.com/superskie/wakeless && cd wakeless
 ```
 
-**Do** `npm test`. **See** 38 passing tests: schedule totals are exact to the
+**Do** `npm test`. **See** 51 passing tests: schedule totals are exact to the
 base unit, no fill is ever below the floor, oversized slices split until they
 clear, the report math matches a hand-computed case, and live mode, run
 against an Agent API double, submits each slice once, in confidential form,
-with the floor as its minimum output, and stops when it should.
+with the floor as its minimum output, and stops when it should. The
+pre-trade check picks the fewest slices that fit and is not fooled by one
+lucky quote, and the exit check flags an address with history.
 
 **Do** `npm run impact`. **See** live 1Click quotes for $1,000 to $1,000,000
 of USDC (Arbitrum) to SOL (Solana). Cost rises with size, and the largest size
 usually returns "No liquidity available". The raw responses are saved to
 `research/impact/`. Liquidity changes during the day, so numbers differ from
 the table above.
+
+**Do** `node bin/wakeless.mjs plan examples/usdc-arb-to-sol.json`. **See** a
+pre-trade check with live quotes: the order cut into 1 to 64 slices, the size
+penalty of each slice size against a $1,000 swap quoted the same minute, and
+advice. The advice is the fewest slices from which every larger count tried
+stays within 2 bps of the $1,000 swap, or one swap when the whole order
+already does. One quote per size is noisy (on 7 November the same 16-slice
+size read +1.8 bps and, a minute later, +17.4 bps), which is why one lucky
+reading cannot set the advice. Last, the three things the public chain shows
+when the order runs live: one deposit, nothing during, one withdrawal.
 
 **Do** `npm run demo`. **See** a $500,000 order worked in 16 slices: one line
 per slice with its live quote and decision, then the report. The 30-minute
@@ -97,7 +109,8 @@ size penalty the slices avoid, so it follows the day's liquidity, and
 **Do** open https://wakeless.pages.dev, or run `npm run web` and open
 `http://localhost:8787/web/`. **See** the web desk: a live price-impact chart
 for the order size, a ticket that works an order as a dry run in the browser
-against live 1Click quotes (no wallet, no key), replays of the two committed
+against live 1Click quotes (no wallet, no key) after an optional pre-trade
+check, replays of the two committed
 $500,000 runs, what a public TWAP and Wakeless
 each leave on the chain, and the mainnet run below with links to its Base
 transactions.
@@ -183,6 +196,13 @@ needs no NEAR and holds no funds.
 
 The agent starts swap-only (`create`); `allow-withdraw` is the owner's signed
 policy update that adds the one withdrawal address, replacing any earlier one.
+Before the owner signs it, `allow-withdraw` reads that address through a
+public RPC (Base, Ethereum, Arbitrum) and says what a withdrawal to it would
+link the order to. An address that has sent transactions, such as the wallet
+that paid in, ties the way out to its history; one with no outgoing
+transactions and no ETH has none the RPC can see. It warns and does not
+refuse. The live run below withdrew to the wallet that made the deposit, and
+the check flags that wallet: it has sent 2 transactions on Base.
 
 Built and checked on the hackathon demo deployment
 (`https://api.demo.agentsonintents.com`, mainnet) on 5 November 2026:
@@ -297,17 +317,19 @@ the deposit address, and later the way out to the owner's wallet.
 
 | Path | What it is |
 | --- | --- |
-| `bin/wakeless.mjs` | Command line: `check`, `impact`, `run`, `report` |
+| `bin/wakeless.mjs` | Command line: `check`, `impact`, `plan`, `run`, `report` |
 | `src/schedule.mjs` | Randomized slice schedule with an exact total |
 | `src/guard.mjs` | Execute, wait, split or skip, as a pure function |
 | `src/engine.mjs` | Arrival snapshot, slice loop, journal events |
 | `src/oneclick.mjs` | 1Click client with retries, quote parsing |
 | `src/report.mjs` | Cost report rebuilt from a journal |
+| `src/precheck.mjs` | Pre-trade check: size penalty by slice count, advice |
 | `live/agent.mjs` | Agent lifecycle on the Agent API: owner, agent, grant, deposit, withdrawal rule, withdraw |
 | `live/run.mjs` | Works an order through the agent, preview or live |
 | `live/executor.mjs` | Submits a slice as a confidential swap with the floor as minimum output |
 | `live/quote-client.mjs` | The agent's swap preview as the price source |
 | `live/public-view.mjs` | The agent's public `intents.near` balances, next to its confidential ones |
+| `live/exit-check.mjs` | What a withdrawal address would link the order to, read from a public RPC |
 | `examples/` | Example orders, a committed dry run, an agent preview run and the live run |
 | `research/impact/` | Raw price impact snapshots |
 

@@ -15,6 +15,7 @@
 // nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near).
 import { createGrantCredential, createIdempotencyKey } from '@near-intents-agent-api/sdk';
 import { agentApi, appendEnv, createOwnerKey, loadOwner, readEnv, required, runOwnerIntent, show, waitForStatus, wakelessPolicy } from './lib.mjs';
+import { describeExit, exitAddressHistory } from './exit-check.mjs';
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -121,6 +122,8 @@ async function main() {
       // only to this one chain address. Any other recipient is refused.
       const [chain, address] = args;
       if (!chain || !address) throw new Error('usage: allow-withdraw <chain> <address>');
+      // Show the owner what this exit address would link the order to before signing.
+      console.log(describeExit(await exitAddressHistory({ chain, address })));
       const api = agentApi(env);
       const { account } = loadOwner(env);
       const agentId = required(env, 'WAKELESS_AGENT_ID');

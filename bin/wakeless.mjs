@@ -15,12 +15,14 @@ import { buildReport, renderReport } from '../src/report.mjs';
 import { mulberry32 } from '../src/rng.mjs';
 import { fromUnits, toUnits } from '../src/units.mjs';
 import { describeEvent, fmt } from '../src/describe.mjs';
+import { adviceText, precheck } from '../src/precheck.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const USAGE = `Usage:
   wakeless check
   wakeless impact --from <asset> --to <asset> [--usd 100,1000,10000] [--no-save]
+  wakeless plan <order.json> [--tolerance <bps>] [--json]
   wakeless run <order.json> [--speed <n>] [--seed <n>] [--journal <file>]
   wakeless report <journal.jsonl> [--json]
 
@@ -100,6 +102,48 @@ async function cmdImpact(args, client) {
     fs.writeFileSync(file, JSON.stringify({ takenAt, sell, buy, rows }, encode, 1) + '\n');
     console.log(`\nSnapshot with the raw quotes: ${path.relative(process.cwd(), file)}`);
   }
+}
+
+/** Pre-trade check: should this order be sliced, into how many, and what will the chain show? */
+async function cmdPlan(args, client) {
+  const file = args._[1];
+  if (!file) throw new Error('plan needs an order file');
+  const spec = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const tokens = await loadTokens(client);
+  const order = prepareOrder(spec, tokens);
+  const options = args.tolerance !== undefined ? { toleranceBps: Number(args.tolerance) } : {};
+  const r = await precheck({ order, client, ...options });
+  if (args.json) {
+    const encode = (_k, v) => (typeof v === 'bigint' ? v.toString() : v);
+    console.log(JSON.stringify(r, encode, 2));
+    return;
+  }
+  const { sell, buy } = order;
+  const signedBps = (v) => (v == null ? '-' : Math.abs(v) < 0.05 ? '+0.0' : `${v >= 0 ? '+' : ''}${fmt(v, 1)}`);
+  console.log(`Pre-trade check: ${fmt(Number(order.amount), 2)} ${sell.symbol} (${sell.blockchain}) -> ${buy.symbol} (${buy.blockchain}), 1Click dry quotes at ${r.takenAt}`);
+  console.log(`Size penalty: how much less ${buy.symbol} per ${sell.symbol} a slice receives than a $${fmt(r.referenceUsd, 0)} swap quoted the same minute.\n`);
+  console.log(`${'slices'.padStart(8)} ${`slice ${sell.symbol}`.padStart(16)} ${'penalty bps'.padStart(13)} ${'vs one swap'.padStart(13)}`);
+  for (const row of r.rows) {
+    const size = fmt(Number(fromUnits(row.amount, sell.decimals)), 2);
+    const cells = row.q.ok
+      ? `${signedBps(row.penaltyBps).padStart(13)} ${signedBps(row.vsOneSwapBps).padStart(13)}`
+      : `   ${row.q.message} (HTTP ${row.q.status})`;
+    const mark = row.slices === r.recommendedSlices ? '  <' : '';
+    console.log(`${String(row.slices).padStart(8)} ${size.padStart(16)} ${cells}${mark}`);
+  }
+  console.log(`\nAdvice: ${adviceText(r)}`);
+  if (r.recommendedSlices && r.recommendedSlices !== order.slices) {
+    console.log(`The order file asks for ${order.slices} slices; set "slices": ${r.recommendedSlices} to follow the advice.`);
+  }
+
+  const outAbout = r.pick?.q.ok ? fmt(Number(fromUnits(r.pick.q.amountOut, buy.decimals)) * r.pick.slices, 4) : null;
+  console.log('\nWhat the public chain shows when this order runs live (node live/run.mjs):');
+  console.log(`  start   one deposit of ${fmt(Number(order.amount), 2)} ${sell.symbol} on ${sell.blockchain}, to the agent's deposit address`);
+  console.log(`  during  nothing on the public intents.near ledger: the slices settle in Confidential Intents balances`);
+  console.log(`  end     one withdrawal of ${outAbout ? `about ${outAbout}` : 'the'} ${buy.symbol} to the one address the agent's policy allows`);
+  console.log('          (an address with no history keeps the way out from pointing at the wallet that paid in;');
+  console.log('           node live/agent.mjs allow-withdraw checks it before the owner signs)');
+  console.log(`A public TWAP of the same order from one wallet would show every slice as a swap with its size and time.`);
 }
 
 async function cmdRun(args, client) {
@@ -223,6 +267,8 @@ async function main() {
       return cmdCheck(client, Boolean(apiKey));
     case 'impact':
       return cmdImpact(args, client);
+    case 'plan':
+      return cmdPlan(args, client);
     case 'run':
       return cmdRun(args, client);
     case 'report':
