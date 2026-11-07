@@ -437,7 +437,7 @@ input[type="range"]:hover::-webkit-slider-thumb, input[type="range"]:focus-visib
 .compare .card { padding: 22px; display: grid; gap: 14px; align-content: start; }
 .compare header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .compare h3 { font: 400 27px/1.05 var(--serif); letter-spacing: -0.01em; }
-.badge { font: 500 10.5px var(--mono); padding: 3px 9px; border-radius: 999px; letter-spacing: 0.06em; text-transform: uppercase; }
+.badge { font: 500 10.5px var(--mono); padding: 3px 9px; border-radius: 999px; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
 .badge.exposed { color: var(--exposed); border: 1px solid rgba(255, 122, 107, 0.45); background: rgba(255, 122, 107, 0.06); }
 .badge.progress { color: var(--wait); border: 1px solid rgba(242, 184, 75, 0.45); }
 .card.exposed { background: radial-gradient(500px 220px at 0% 0%, rgba(255, 122, 107, 0.08), transparent 70%), var(--panel); }
@@ -497,7 +497,7 @@ input[type="range"]:hover::-webkit-slider-thumb, input[type="range"]:focus-visib
 .privacy-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .privacy-table th { text-align: right; color: var(--muted); font: 500 10.5px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; padding: 8px 10px; border-bottom: 1px solid var(--line-2); }
 .privacy-table th:first-child, .privacy-table td:first-child { text-align: left; }
-.privacy-table td { text-align: right; padding: 10px; border-bottom: 1px solid var(--line); font: 400 12.5px var(--mono); color: var(--ink-2); }
+.privacy-table td { text-align: right; padding: 10px; border-bottom: 1px solid var(--line); font: 400 12.5px var(--mono); color: var(--ink-2); white-space: nowrap; }
 .privacy-table tbody tr { transition: background 0.2s; }
 .privacy-table tbody tr:hover { background: rgba(255, 255, 255, 0.02); }
 .privacy-table td.good { color: var(--quiet); }
@@ -560,7 +560,7 @@ h1 .line:nth-child(2) > span { animation-delay: 0.12s; }
 .js .reveal.in { opacity: 1; transform: none; }
 
 @media (max-width: 1080px) {
-  .hero { grid-template-columns: 1fr; min-height: 0; }
+  .hero { grid-template-columns: 1fr; min-height: 0; padding-bottom: 240px; }
   .desk { grid-template-columns: minmax(0, 1fr); }
   .ticket { position: static; }
   .monitor-body.has-result { grid-template-columns: 1fr; }
@@ -576,6 +576,13 @@ h1 .line:nth-child(2) > span { animation-delay: 0.12s; }
   .live-table .hash { display: none; }
   .tape li { grid-template-columns: 44px 1fr auto; }
   .tape .px { display: none; }
+  /* Phone ledger rows read like a feed: time and amount on top, what happened under them. */
+  .ledger li { grid-template-columns: auto minmax(0, 1fr); row-gap: 3px; padding: 9px 12px; }
+  .ledger li > .amt { grid-row: 1; grid-column: 2; justify-self: end; font-size: 12px; }
+  .ledger li > span:nth-child(2) { grid-row: 2; grid-column: 1 / -1; }
+  .live .ledger li { grid-template-columns: 44px minmax(0, 1fr); }
+  .live .ledger li > span:nth-child(2) { grid-row: auto; grid-column: 2; }
+  .legend { gap: 8px 12px; font-size: 11.5px; }
   .proof { grid-template-columns: minmax(0, 1fr); margin-top: -48px; }
   .proof li { padding: 14px 0; }
   .proof li + li { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); }
@@ -587,11 +594,14 @@ h1 .line:nth-child(2) > span { animation-delay: 0.12s; }
 }
 @media (max-width: 480px) {
   .impact-head { flex-wrap: wrap; }
-  .eyebrow { letter-spacing: 0.1em; }
+  .eyebrow { font-size: 10px; letter-spacing: 0.06em; }
+  .eyebrow span { margin: 0 3px; }
   .empty { padding: 14px; gap: 8px; }
   .replay-pair { grid-template-columns: minmax(0, 1fr); }
   table.privacy-table th, table.privacy-table td { padding-left: 4px; padding-right: 4px; }
+  table.privacy-table td { font-size: 11.5px; }
   .ticket, .monitor, .compare .card, .privacy, .live-grid { padding: 18px; }
+  .compare h3 { font-size: 24px; }
 }
 /* Long option names must not widen the ticket past a 360px screen. */
 .ticket, .pair, .field, .group { grid-template-columns: minmax(0, 1fr); }

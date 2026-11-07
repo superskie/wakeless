@@ -787,8 +787,8 @@ async function loadPrivacySnapshot() {
       tbody.append(
         html('tr', {}, [
           html('td', { text: `$${num(usd, 0)}` }),
-          html('td', { text: `${num(v.public, 4)} SOL` }),
-          html('td', { text: `${num(v.basic, 4)} SOL` }),
+          html('td', { text: num(v.public, 4) }),
+          html('td', { text: num(v.basic, 4) }),
           html('td', { class: diff >= 0 ? 'good' : '', text: `${signed(diff, 2)} bps` }),
         ]),
       );

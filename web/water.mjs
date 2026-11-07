@@ -30,7 +30,8 @@ export function startWater(canvas, { slices = 16 } = {}) {
 
   function build() {
     // The water is a band along the bottom of the hero, under the copy.
-    horizon = Math.max(height * 0.45, height - Math.min(270, height * 0.42));
+    // One column below 1080 px: the hero keeps a taller empty strip for it.
+    horizon = Math.max(height * 0.45, height - Math.min(width < 1080 ? 240 : 270, height * 0.42));
     const count = Math.max(14, Math.min(26, Math.round((height - horizon) / 10)));
     lines = Array.from({ length: count }, (_, i) => {
       const d = (i + 1) / count; // 0 far, 1 near
@@ -40,7 +41,7 @@ export function startWater(canvas, { slices = 16 } = {}) {
         amp: (0.4 + d * 1.6) * rand(0.7, 1.2),
         freq: rand(0.004, 0.009) / (0.6 + d),
         phase: rand(0, Math.PI * 2),
-        speed: rand(0.15, 0.4),
+        speed: rand(0.07, 0.18),
         alpha: 0.035 + d * 0.11,
       };
     });
@@ -69,19 +70,21 @@ export function startWater(canvas, { slices = 16 } = {}) {
     g.fillStyle = edge;
     g.fillRect(0, horizon - 0.5, width, 1);
 
-    // One loop: the swap crosses, its wake fades, then the slices cross.
-    const lane = 0.5;
-    const speed = Math.max(120, width / 7.5);
+    // One slow loop, the same length at any width: the swap takes 24 seconds
+    // to cross, its wake settles, then the slices drift across over about 16.
+    const lane = 0.62;
+    const k = Math.min(1, Math.max(0.6, width / 1200));
+    const speed = (width + 160) / 24;
     const cross = (width + 160) / speed;
-    const sliceStart = cross + 1.6;
+    const sliceStart = cross + 3;
     const parts = Array.from({ length: slices }, (_, i) => ({
-      at: sliceStart + i * 0.34 + rand(0, 0.28),
+      at: sliceStart + i * (16 / slices) + rand(0, 12 / slices),
       d: lane + rand(-0.07, 0.07),
-      h: rand(5, 15),
-      v: speed * rand(1.05, 1.25),
+      h: rand(5, 15) * k,
+      v: speed * rand(0.95, 1.1),
     }));
     const lastOut = Math.max(...parts.map((p) => p.at + (width + 160) / p.v));
-    story = { lane, speed, cross, parts, period: lastOut + 1.2 };
+    story = { lane, k, speed, cross, parts, period: lastOut + 2 };
   }
 
   function resize() {
@@ -93,7 +96,7 @@ export function startWater(canvas, { slices = 16 } = {}) {
     canvas.height = Math.max(1, Math.round(height * dpr));
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     build();
-    draw(reduce ? story.cross + 4.5 : performance.now() / 1000);
+    draw(reduce ? story.cross + 22 : performance.now() / 1000);
   }
 
   const lineY = (line, x, t) => line.y + Math.sin(x * line.freq + line.phase + t * line.speed) * line.amp;
@@ -102,13 +105,13 @@ export function startWater(canvas, { slices = 16 } = {}) {
 
   function draw(seconds) {
     const t = seconds % story.period;
-    const { lane, speed, cross, parts } = story;
+    const { lane, k, speed, cross, parts } = story;
     ctx.clearRect(0, 0, width, height);
     ctx.drawImage(glow, 0, 0, width, height);
 
     // The swap, and how strong its wake still is.
     const bx = -80 + t * speed;
-    const level = t < cross ? 1 : 1 - ease(clamp01((t - cross) / 2.4));
+    const level = t < cross ? 1 : 1 - ease(clamp01((t - cross) / 4));
     const boatY = depthY(lane);
 
     ctx.lineWidth = 1;
@@ -130,28 +133,36 @@ export function startWater(canvas, { slices = 16 } = {}) {
           const sigma = 10 + dx * 0.05;
           const g = Math.exp(-(arm * arm) / (2 * sigma * sigma));
           const inside = Math.abs(z) < dx * KELVIN ? 0.25 * Math.exp(-dx / 260) : 0;
-          w = (g + inside) * Math.sin(dx * 0.075 - t * 3.2) * 9 * size * Math.exp(-dx / 650) * level;
+          w = (g + inside) * Math.sin(dx * 0.06 - t * 0.9) * 6 * k * size * Math.exp(-dx / 650) * level;
         }
         disp[i] = w;
         ys[i] = lineY(line, x, seconds) + w;
       }
-      for (let c = 0; c < xs.length - 1; c += chunk) {
-        const end = Math.min(xs.length - 1, c + chunk);
+      const bowIndex = Math.ceil(bx / step);
+      for (let c = 0; c < xs.length - 1; ) {
+        let end = Math.min(xs.length - 1, c + chunk);
+        if (c < bowIndex && end > bowIndex) end = bowIndex;
         let peak = 0;
         for (let i = c; i <= end; i++) peak = Math.max(peak, Math.abs(disp[i]));
         ctx.beginPath();
         ctx.moveTo(xs[c], ys[c]);
         for (let i = c + 1; i <= end; i++) ctx.lineTo(xs[i], ys[i]);
-        ctx.strokeStyle = `rgba(${TEAL}, ${Math.min(0.6, line.alpha + peak * 0.045)})`;
+        ctx.strokeStyle = `rgba(${TEAL}, ${Math.min(0.45, line.alpha + peak * 0.04)})`;
         ctx.stroke();
+        c = end;
       }
     }
 
-    ctx.font = '500 11px "Geist Mono", ui-monospace, monospace';
+    ctx.font = `500 ${k < 0.8 ? 10 : 11}px "Geist Mono", ui-monospace, monospace`;
     ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+    const label = (text, x, y) => {
+      const w = ctx.measureText(text).width;
+      ctx.fillText(text, Math.max(8, Math.min(x - w / 2, width - w - 8)), y);
+    };
 
     if (bx > -40 && bx < width + 40) {
-      const s = scaleAt(lane);
+      const s = scaleAt(lane) * k;
       const h = 46 * s;
       const w = 9 * s;
       const top = boatY - h;
@@ -163,7 +174,7 @@ export function startWater(canvas, { slices = 16 } = {}) {
       ctx.fillStyle = body;
       ctx.fillRect(bx - w / 2, top, w, h);
       ctx.fillStyle = 'rgba(233, 238, 244, 0.6)';
-      ctx.fillText('one swap', bx - 26, top - 12);
+      label('one swap', bx, top - 12);
     }
 
     let lead = null;
@@ -174,12 +185,12 @@ export function startWater(canvas, { slices = 16 } = {}) {
       const y = depthY(p.d) + Math.sin(x * 0.006 + p.h) * 0.8;
       const h = p.h * s;
       ctx.fillStyle = `rgba(${TEAL}, 0.75)`;
-      ctx.fillRect(x - 1.5, y - h, 3, h);
+      ctx.fillRect(x - 1.25, y - h, 2.5, h);
       if (!lead || x > lead.x) lead = { x, y: y - h };
     }
     if (lead) {
       ctx.fillStyle = `rgba(${TEAL}, 0.85)`;
-      ctx.fillText(`${slices} slices, no wake`, Math.min(lead.x - 40, width - 150), depthY(lane - 0.1) - 30);
+      label(`${slices} slices, no wake`, lead.x, depthY(lane - 0.1) - 30 * k);
     }
   }
 
@@ -195,6 +206,6 @@ export function startWater(canvas, { slices = 16 } = {}) {
     onScreen = entries.some((e) => e.isIntersecting);
   }).observe(canvas);
   resize();
-  if (document.fonts) document.fonts.ready.then(() => reduce && draw(story.cross + 4.5));
+  if (document.fonts) document.fonts.ready.then(() => reduce && draw(story.cross + 22));
   if (!reduce) requestAnimationFrame(frame);
 }
