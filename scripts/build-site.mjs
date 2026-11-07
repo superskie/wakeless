@@ -67,8 +67,12 @@ const files = [...new Set([...webFiles, ...modules, ...data])].sort();
 fs.rmSync(OUT, { recursive: true, force: true });
 let bytes = 0;
 for (const file of files) bytes += copy(file);
-// Cloudflare Pages reads _redirects; the root opens the desk.
-fs.writeFileSync(path.join(OUT, '_redirects'), '/ /web/ 302\n');
+// The landing page is the root. It links everything by absolute path, so the
+// same file works as /index.html here and as /web/home.html in the repo.
+fs.copyFileSync(path.join(webDir, 'home.html'), path.join(OUT, 'index.html'));
+// Cloudflare Pages reads _redirects: one address for the landing page, which
+// Pages would otherwise also serve as /web/home.
+fs.writeFileSync(path.join(OUT, '_redirects'), '/web/home.html / 301\n/web/home / 301\n');
 
 const outside = files.filter((f) => !f.startsWith(webDir + path.sep)).map(rel);
 console.log(`site/: ${files.length} files, ${(bytes / 1024).toFixed(0)} KiB`);

@@ -22,19 +22,19 @@ const TYPES = {
   '.md': 'text/plain; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.webp': 'image/webp',
   '.woff2': 'font/woff2',
 };
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
   let rel = decodeURIComponent(url.pathname).replace(/^\/+/, '');
-  if (rel === '') {
-    res.writeHead(302, { location: '/web/' });
-    return res.end();
-  }
+  // The root is the landing page: web/home.html in the repo, its copy index.html in the build.
+  if (rel === '') rel = ROOT === REPO ? 'web/home.html' : 'index.html';
   if (rel.endsWith('/')) rel += 'index.html';
   const parts = rel.split('/');
-  if (!ALLOWED.has(parts[0]) || parts.some((p) => p.startsWith('.') || p === '')) {
+  const rootPage = ROOT !== REPO && rel === 'index.html';
+  if ((!rootPage && !ALLOWED.has(parts[0])) || parts.some((p) => p.startsWith('.') || p === '')) {
     res.writeHead(404);
     return res.end('not found');
   }

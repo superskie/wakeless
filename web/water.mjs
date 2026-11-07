@@ -11,7 +11,14 @@
 const TEAL = '94, 224, 193';
 const KELVIN = 0.36; // tan(19.5 degrees), the half-angle of a ship's wake
 
-export function startWater(canvas, { slices = 16 } = {}) {
+/**
+ * @param {HTMLCanvasElement} canvas
+ * @param {object} [options]
+ * @param {number} [options.slices] how many slices cross after the swap
+ * @param {number} [options.band] share of the canvas height the water fills;
+ *   by default a band along the bottom sized for the desk's hero
+ */
+export function startWater(canvas, { slices = 16, band = null } = {}) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -31,8 +38,10 @@ export function startWater(canvas, { slices = 16 } = {}) {
   function build() {
     // The water is a band along the bottom of the hero, under the copy.
     // One column below 1080 px: the hero keeps a taller empty strip for it.
-    horizon = Math.max(height * 0.45, height - Math.min(width < 1080 ? 240 : 270, height * 0.42));
-    const count = Math.max(14, Math.min(26, Math.round((height - horizon) / 10)));
+    horizon = band
+      ? height * (1 - band)
+      : Math.max(height * 0.45, height - Math.min(width < 1080 ? 240 : 270, height * 0.42));
+    const count = Math.max(14, Math.min(band ? 34 : 26, Math.round((height - horizon) / 10)));
     lines = Array.from({ length: count }, (_, i) => {
       const d = (i + 1) / count; // 0 far, 1 near
       return {

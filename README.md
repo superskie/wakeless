@@ -64,7 +64,7 @@ Needs Node 22 or later. No keys, no funds, no dependencies to install.
 git clone https://github.com/superskie/wakeless && cd wakeless
 ```
 
-**Do** `npm test`. **See** 51 passing tests: schedule totals are exact to the
+**Do** `npm test`. **See** 60 passing tests: schedule totals are exact to the
 base unit, no fill is ever below the floor, oversized slices split until they
 clear, the report math matches a hand-computed case, and live mode, run
 against an Agent API double, submits each slice once, in confidential form,
@@ -111,7 +111,11 @@ size penalty the slices avoid, so it follows the day's liquidity, and
 `npm run demo` will print its own number for the market you run it in.
 
 **Do** open https://wakeless.pages.dev, or run `npm run web` and open
-`http://localhost:8787/web/`. **See** the web desk: a live price-impact chart
+`http://localhost:8787/`. **See** the landing page (`web/home.html`): the size
+penalty from the committed quotes, the public leak next to the mainnet run,
+the desk's own scheduler to play with, the signed policy and its checks, and
+every claim with the command or transaction that checks it. **Do** open the
+desk at `/web/`. **See** the web desk: a live price-impact chart
 for the order size, a ticket that works an order as a dry run in the browser
 against live 1Click quotes (no wallet, no key) after an optional pre-trade
 check, a preview of the ticket's plan (one possible schedule, drawn by the

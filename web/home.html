@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wakeless: big trades, no wake</title>
+  <meta name="description" content="Wakeless works a large cross-chain swap as small, randomly timed slices through NEAR Intents, each sent in confidential form, with a price floor on every slice and a wallet that refuses anything larger.">
+  <meta name="theme-color" content="#07090c">
+  <meta property="og:title" content="Wakeless: big trades, no wake">
+  <meta property="og:description" content="A large cross-chain swap, worked in random slices through NEAR Intents in confidential form. Every claim on the page comes with a check.">
+  <meta property="og:type" content="website">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230e1318'/%3E%3Crect x='7' y='9' width='3' height='11' rx='1.5' fill='%235ee0c1'/%3E%3Crect x='14.5' y='13' width='3' height='7' rx='1.5' fill='%235ee0c1'/%3E%3Crect x='22' y='7' width='3' height='13' rx='1.5' fill='%235ee0c1'/%3E%3Crect x='6' y='24' width='20' height='2' rx='1' fill='%23e9eef4' opacity='.55'/%3E%3C/svg%3E">
+  <link rel="preload" href="/web/fonts/InstrumentSerif-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/web/fonts/InstrumentSerif-400i.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/web/fonts/Geist-var.woff2" as="font" type="font/woff2" crossorigin>
+  <script>document.documentElement.classList.add('js');</script>
+  <link rel="stylesheet" href="/web/fonts.css">
+  <link rel="stylesheet" href="/web/home.css">
+  <script type="module" src="/web/home.mjs"></script>
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+  <svg class="defs" aria-hidden="true" width="0" height="0">
+    <defs>
+      <linearGradient id="costGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#ff9a8d"/>
+        <stop offset="100%" stop-color="#a8443a"/>
+      </linearGradient>
+      <linearGradient id="sliceGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#86f2d9"/>
+        <stop offset="100%" stop-color="#2aa98b"/>
+      </linearGradient>
+      <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <rect width="6" height="6" fill="rgba(255,122,107,0.05)"/>
+        <line x1="0" y1="0" x2="0" y2="6" stroke="rgba(255,122,107,0.42)" stroke-width="2"/>
+      </pattern>
+    </defs>
+  </svg>
+
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Wakeless home">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="8" class="mark-bg"/>
+        <rect x="7" y="9" width="3" height="11" rx="1.5" class="mark-bar"/>
+        <rect x="14.5" y="13" width="3" height="7" rx="1.5" class="mark-bar"/>
+        <rect x="22" y="7" width="3" height="13" rx="1.5" class="mark-bar"/>
+        <rect x="6" y="24" width="20" height="2" rx="1" class="mark-line"/>
+      </svg>
+      <span class="wordmark">Wakeless</span>
+    </a>
+    <nav class="topnav" aria-label="Sections">
+      <a href="#cost">The cost</a>
+      <a href="#how">How it works</a>
+      <a href="#wallet">Live mode</a>
+      <a href="#checks">Checks</a>
+      <a href="#limits">Limits</a>
+    </nav>
+    <a class="btn primary small topbar-cta" href="/web/">Open the desk</a>
+  </header>
+
+  <main>
+    <section class="hero">
+      <canvas id="water" aria-hidden="true"></canvas>
+      <div class="hero-copy">
+        <p class="eyebrow">Private order execution <span>/</span> NEAR Intents</p>
+        <h1><span class="line"><span>Big trades.</span></span><span class="line"><span><em>No wake.</em></span></span></h1>
+        <p class="lede">Wakeless works one large cross-chain swap as small slices of random size and timing through NEAR Intents, each sent in confidential form. The order pays less for its size, and the public ledger shows no schedule to trade against.</p>
+        <div class="hero-cta">
+          <a class="btn primary" href="/web/">Open the desk</a>
+          <a class="btn ghost" href="#checks">Check the claims</a>
+        </div>
+        <p class="fineprint">The desk works an order in your browser against live 1Click quotes and simulates the fills. No wallet, no key.</p>
+      </div>
+      <figure class="shot">
+        <div class="shot-frame">
+          <img src="/web/assets/desk-replay.webp" width="1120" height="1038" alt="The Wakeless desk after replaying the 5 November run: 16 filled slices on a 30 minute timeline, and a report reading 23.1 bps more SOL than one swap.">
+        </div>
+        <figcaption><span class="live-dot" aria-hidden="true"></span>The desk, replaying the 5 Nov $500,000 run</figcaption>
+      </figure>
+    </section>
+
+    <ul class="proof" aria-label="What has been shown so far">
+      <li>
+        <span class="proof-v">+23.1 <i>/</i> +4.5 <small>bps</small></span>
+        <span class="proof-k">More SOL than one swap</span>
+        <span class="proof-n">Dry runs of one $500,000 USDC order on live quotes, 5 and 7 Nov. The saving follows the day's liquidity.</span>
+      </li>
+      <li>
+        <span class="proof-v">4 <i>of</i> 4</span>
+        <span class="proof-k">Slices settled on mainnet</span>
+        <span class="proof-n">0.0025 ETH on Base, about $6, worked into SOL through a policy-bound agent, 5 Nov.</span>
+      </li>
+      <li>
+        <span class="proof-v">0 <small>SOL</small></span>
+        <span class="proof-k">On the public ledger, mid-run</span>
+        <span class="proof-n">intents.near at block 223,137,273, while the agent held 0.062710 SOL in confidential form.</span>
+      </li>
+      <li>
+        <span class="proof-v">Refused</span>
+        <span class="proof-k">The whole order as one swap</span>
+        <span class="proof-n">By the per-swap cap the owner signed into the wallet's policy, 7 Nov.</span>
+      </li>
+    </ul>
+
+    <section class="section" id="cost">
+      <header class="section-head reveal">
+        <p class="index">01 <span>/</span> The cost of size</p>
+        <h2>One swap <em class="x">pays for its size.</em></h2>
+        <p>Quote the same pair at $1,000 and at $500,000 in the same minute, and the large swap gets less per dollar. Above what the solvers fill at once, it gets no quote at all.</p>
+      </header>
+      <figure class="impact card reveal" id="impact">
+        <div class="picker" role="group" aria-label="Pair and day" id="impact-picker"></div>
+        <svg id="impact-chart" viewBox="0 0 640 300" role="img" aria-label="Extra cost of one swap against a $1,000 swap, by size"></svg>
+        <figcaption class="reading">
+          <span class="reading-v" id="impact-v">&nbsp;</span>
+          <span class="reading-k" id="impact-k">Loading the committed quotes.</span>
+          <span class="reading-n" id="impact-n"></span>
+          <span class="fineprint">Extra cost against a $1,000 swap quoted the same minute. The platform fee is a percentage, so it cancels out. Raw 1Click responses are committed in <code>research/impact/</code>, and <code>npm run impact</code> measures again.</span>
+        </figcaption>
+      </figure>
+    </section>
+
+    <section class="section" id="leak">
+      <header class="section-head reveal">
+        <p class="index">02 <span>/</span> The leak</p>
+        <h2>Slicing in public is <em class="x">a broadcast.</em></h2>
+        <p>Desks split large orders over time. Done from one public wallet, the split tells everyone watching how much is still coming.</p>
+      </header>
+      <div class="contrast">
+        <article class="side exposed card reveal">
+          <p class="side-k"><span class="badge exposed">Public</span>A TWAP from one wallet</p>
+          <ol class="ledger">
+            <li><span class="t">00:57</span><span><span class="addr">0x7a3f...9c21</span> sells 31,250 USDC</span></li>
+            <li><span class="t">02:50</span><span><span class="addr">0x7a3f...9c21</span> sells 31,250 USDC</span></li>
+            <li><span class="t">04:43</span><span><span class="addr">0x7a3f...9c21</span> sells 31,250 USDC</span></li>
+            <li class="more">13 more: same wallet, same size, every 1m 53s</li>
+          </ol>
+          <p class="side-cap">An illustration: $500,000 in 16 equal slices from one wallet.</p>
+          <ul class="facts">
+            <li>On Hyperliquid a TWAP is an on-chain action that carries the wallet, market, side, total size and duration.</li>
+            <li>On 7 Nov 2026 at 08:28 UTC a public tracker listed <a href="https://vike.io/hyperliquid/twaps" rel="noopener">416 running TWAPs</a> with about $40M ordered.</li>
+            <li>An <a href="https://github.com/LoveBloodAndDiamonds/hyperliquid-twap-watcher" rel="noopener">open-source library</a> reports each slice of a tracked TWAP within about half a second.</li>
+            <li>Random sizes do not hide an order whose total is public.</li>
+          </ul>
+        </article>
+        <article class="side quiet card reveal" style="--d: 90ms">
+          <p class="side-k"><span class="badge quiet">Wakeless</span>The mainnet run, 5 Nov</p>
+          <ol class="ledger">
+            <li><span class="t">in</span><span>0.0025 ETH to the agent's confidential deposit address <span class="pub">public, on Base</span></span></li>
+            <li class="sealed"><b>07:43 to 07:48: four slices settle, ETH to SOL</b><span>Confidential. nearblocks lists no transaction for the agent, and the API returns intent hashes only.</span></li>
+            <li class="sealed"><b>Then the SOL goes back to ETH</b><span>Confidential, the same way.</span></li>
+            <li><span class="t">out</span><span>The ETH to the owner's wallet <span class="pub">public, on Base</span></span></li>
+          </ol>
+          <p class="side-cap">Real transactions. At block 223,137,273 the public intents.near ledger showed the agent holding 0 SOL while its confidential balance held 0.062710 SOL.</p>
+          <ul class="facts">
+            <li>No slice is a public transaction, so there is no schedule to watch and no remaining size to work out.</li>
+            <li>What stays public is the way in and the way out.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="how">
+      <header class="section-head reveal">
+        <p class="index">03 <span>/</span> How a run works</p>
+        <h2>Random slices, <em>a hard floor.</em></h2>
+        <p>One engine runs in the browser, on the command line and through the agent. The scheduler below is the desk's own, fed the same $500,000 order. Move it.</p>
+      </header>
+      <div class="how">
+        <figure class="sched card reveal">
+          <div class="sched-controls">
+            <label class="field" for="sched-slices">
+              <span class="field-label">Slices <output id="sched-out" for="sched-slices">16</output></span>
+              <input type="range" id="sched-slices" min="2" max="64" step="1" value="16">
+            </label>
+            <button class="btn small" type="button" id="sched-redraw">Draw again</button>
+          </div>
+          <svg id="sched" viewBox="0 0 720 290" role="img" aria-label="One possible slice schedule for $500,000 over 30 minutes"></svg>
+          <figcaption class="sched-note" id="sched-note">One possible schedule for $500,000 of USDC over 30 minutes.</figcaption>
+        </figure>
+        <ol class="steps reveal" style="--d: 90ms">
+          <li><b>Arrival</b><span>Quote a slice and the whole order at the same moment. The arrival price minus the move you accept is the floor; the whole-order quote is the benchmark.</span></li>
+          <li><b>Slices</b><span>Each slice gets a random size and a random moment inside its own slot. The sizes add up to the order to the base unit, and the seed replays the schedule.</span></li>
+          <li><b>Floor</b><span>A slice executes only at or above the floor. Below it, the slice waits for a later slot, then stays unfilled; the floor is never lowered to finish. A slice that finds no liquidity splits in two. Live, the floor is also the swap's <code>min_amount_out</code>.</span></li>
+          <li><b>Report</b><span>Every decision goes to a journal with its raw quote, and the report is rebuilt from that journal alone, against one swap of the whole order quoted at arrival.</span></li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section" id="wallet">
+      <header class="section-head reveal">
+        <p class="index">04 <span>/</span> Live mode</p>
+        <h2>The wallet <em>keeps the rules.</em></h2>
+        <p>Live mode runs through an agent account on the NEAR Intents Agent API. The owner signs one policy, and the API enforces it on every request from the desk's grant, before anything reaches a solver.</p>
+      </header>
+      <div class="rules">
+        <div class="policy card reveal">
+          <p class="policy-k">Signed policy <span>revision 4, 7 Nov</span></p>
+          <dl>
+            <div><dt>actions</dt><dd>swap, withdraw</dd></div>
+            <div><dt>withdraw to</dt><dd>the owner's wallet, nowhere else</dd></div>
+            <div><dt>form</dt><dd>confidential</dd></div>
+            <div class="hl"><dt>per swap</dt><dd>the largest possible slice, 0.000956 of 0.0025 ETH</dd></div>
+            <div class="hl"><dt>per day</dt><dd>the order, 0.0025 ETH</dd></div>
+            <div><dt>budget</dt><dd>$250 a day, 120 actions an hour</dd></div>
+            <div><dt>frozen</dt><dd>the owner's switch, any time</dd></div>
+          </dl>
+          <p class="policy-foot">The owner's key signs the rules. The desk holds a grant, which can not change them, so a leaked grant can only swap within the caps or pay the owner back.</p>
+          <p class="fineprint">The policy goes on chain encrypted, next to its hash; the cap is not readable there. The time of a change is public, so sign a cap well ahead of an order.</p>
+        </div>
+        <div class="evidence">
+          <div class="ev card reveal" style="--d: 90ms">
+            <p class="ev-k">Asked for more than a slice</p>
+            <table class="ev-table">
+              <thead><tr><th>Dry swap through the grant</th><th>Answer</th></tr></thead>
+              <tbody>
+                <tr><td>The whole order<span class="amt">0.0025 ETH</span></td><td class="no">refused</td></tr>
+                <tr><td>Exactly the cap<span class="amt">0.00095588235294118 ETH</span></td><td class="ok">within the cap</td></tr>
+                <tr><td>One wei above the cap<span class="amt">0.000955882352941181 ETH</span></td><td class="no">refused</td></tr>
+              </tbody>
+            </table>
+            <p class="fineprint">Refused means <code>policy_transaction_limit_exceeded</code>. All three also warn <code>insufficient_balance</code>: the agent was empty after the round trip. <a href="https://nearblocks.io/txns/Dw4oWNUvgJFmbjC9GGPECvhQT1nF4L2JJRahNt634aqe" rel="noopener">The policy change on NEAR</a>.</p>
+          </div>
+          <div class="ev card reveal" style="--d: 180ms">
+            <p class="ev-k">Frozen mid-run</p>
+            <ol class="ledger compact">
+              <li><span class="t">12:26:29</span><span>A preview run of the 4-slice order starts.</span></li>
+              <li><span class="t">12:27:01</span><span>The owner freezes the wallet. <span class="pub">revision 5: <a href="https://nearblocks.io/txns/AcZmj7Af45URVgHDsaLG6rbdL2HcSNm8BiywKhjWSkbJ" rel="noopener">NEAR tx</a></span></span></li>
+              <li><span class="t">12:27:41</span><span>Slice 2 gets <code>wallet_frozen</code>, and the desk stops the order.</span></li>
+            </ol>
+            <p class="fineprint">Stopping a run needs nothing from the desk. The owner unfroze at 12:28:10, revision 6, with the cap intact.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="checks">
+      <header class="section-head reveal">
+        <p class="index">05 <span>/</span> Check it yourself</p>
+        <h2>Every claim <em>comes with a check.</em></h2>
+        <p>Each number on this page points at a committed file, a transaction, or a command to run in the repository. Reading the chain needs no keys.</p>
+      </header>
+      <ol class="checks">
+        <li class="reveal">
+          <p class="claim">The $500,000 USDC to SOL order, sliced, got 23.1 bps more SOL than one swap on 5 Nov quotes.</p>
+          <div class="check"><code>node bin/wakeless.mjs report examples/sample-run.jsonl</code><button class="copy" type="button" data-copy="node bin/wakeless.mjs report examples/sample-run.jsonl">Copy</button></div>
+        </li>
+        <li class="reveal" style="--d: 60ms">
+          <p class="claim">Mid-run, the public intents.near ledger showed the agent holding 0 SOL.</p>
+          <div class="check"><code>node live/public-view.mjs 0d54a875b32c4ad1668c3e86e807ab28905133c93e1daae19653decaedea079f --block 223137273</code><button class="copy" type="button" data-copy="node live/public-view.mjs 0d54a875b32c4ad1668c3e86e807ab28905133c93e1daae19653decaedea079f --block 223137273">Copy</button></div>
+        </li>
+        <li class="reveal" style="--d: 60ms">
+          <p class="claim">The wallet refuses the whole order as one swap, and one wei above the cap. Needs an agent of your own.</p>
+          <div class="check"><code>node live/agent.mjs prove-cap examples/live-eth-base-to-sol.json</code><button class="copy" type="button" data-copy="node live/agent.mjs prove-cap examples/live-eth-base-to-sol.json">Copy</button></div>
+        </li>
+        <li class="reveal">
+          <p class="claim">Confidential form costs nothing extra: the same or up to 4.4 bps more SOL than public quotes, $1,000 to $250,000, 5 Nov.</p>
+          <div class="check links"><a id="confidential-link" href="/research/confidential/usdc-arb_sol-sol_2026-11-05t03-37-19-519z.json">The raw quotes</a></div>
+        </li>
+        <li class="reveal" style="--d: 60ms">
+          <p class="claim">The size penalty, measured live for USDC on Arbitrum to SOL.</p>
+          <div class="check"><code>npm run impact</code><button class="copy" type="button" data-copy="npm run impact">Copy</button></div>
+        </li>
+      </ol>
+    </section>
+
+    <section class="section" id="limits">
+      <header class="section-head reveal">
+        <p class="index">06 <span>/</span> Limits</p>
+        <h2>What it <em>does not</em> do.</h2>
+        <p>The edges of a hackathon build, stated plainly, so you can judge where it fits.</p>
+      </header>
+      <ul class="limits">
+        <li class="reveal"><b>Fees still apply.</b>Every fill pays the 1Click platform fee: 20 bps with a partner key, 1 bp on stablecoin pairs. It is a percentage, so slicing adds none, and the pre-trade check advises one swap when size costs nothing.</li>
+        <li class="reveal" style="--d: 60ms"><b>Private from the public, not from the operator.</b>The Agent API that executes the swaps sees them. The public intents.near ledger does not.</li>
+        <li class="reveal" style="--d: 120ms"><b>The ends are public.</b>The deposit and the withdrawal are ordinary transactions on their chains, and so is the time of every policy change.</li>
+        <li class="reveal"><b>The saving moves with the market.</b>$500,000 cost 24.5 bps more than $1,000 on 5 Nov and 8.7 bps two days later. Run the pre-trade check right before an order.</li>
+        <li class="reveal" style="--d: 60ms"><b>A dry run sees a fresh market.</b>Dry slices use up no liquidity. A real slice only finds the same depth if market makers refill between slices, and only a live run at size measures that.</li>
+        <li class="reveal" style="--d: 120ms"><b>The live run was small.</b>At $6 there was no impact to avoid, so its slices got 15.5 bps less SOL than one swap. It proves the path; the $500,000 runs are dry runs on live quotes.</li>
+      </ul>
+    </section>
+
+    <section class="cta reveal" id="start">
+      <canvas id="water-cta" aria-hidden="true"></canvas>
+      <p class="index">The desk</p>
+      <h2>Work a $500,000 order <em>in your browser.</em></h2>
+      <p>Live 1Click quotes, simulated fills, the report at the end. No wallet, no key, nothing signed.</p>
+      <div class="hero-cta">
+        <a class="btn primary" href="/web/">Open the desk</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="foot-sign">
+      <p class="foot-mark">Wakeless</p>
+      <p class="foot-line">Big trades. <em>No wake.</em></p>
+    </div>
+    <div class="foot-meta">
+      <p>Built at NEAR HACKATHON, 1 to 14 November 2026. Tracks: Unstoppable DeFi, Agent Economy, Privacy &amp; Private AI.</p>
+      <p>MIT license. A hackathon build, unaudited. <a href="/web/">Open the desk</a></p>
+    </div>
+  </footer>
+</body>
+</html>
