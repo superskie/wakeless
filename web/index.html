@@ -183,13 +183,6 @@
             <span class="run-label">Work this order</span>
           </button>
           <p class="error" id="ticket-error" role="alert"></p>
-
-          <ol class="next">
-            <li><b>Arrival.</b> Quote one slice and the whole order at once.</li>
-            <li><b>Slices.</b> Each fires at a random moment inside its own slot, at a random size.</li>
-            <li><b>Floor.</b> A slice fills only at or above the floor; otherwise it waits, splits or stays unfilled.</li>
-            <li><b>Report.</b> Compare the slices with doing it in one swap.</li>
-          </ol>
         </form>
 
         <section class="monitor card reveal" aria-labelledby="monitor-title" style="--d: 90ms">
@@ -204,23 +197,12 @@
           </header>
 
           <div class="timeline-wrap">
-            <svg id="timeline" viewBox="0 0 720 230" role="img" aria-label="Slice timeline"></svg>
-            <div class="empty" id="monitor-empty">
-              <p class="empty-title">Nothing is working yet.</p>
-              <p>Set an order and press <b>Work this order</b>, or replay one of the two committed $500,000 runs, USDC on Arbitrum to SOL.</p>
-              <div class="replay-pair">
-                <button class="replay-card" type="button" id="replay" title="5 Nov 2026, a thin market">
-                  <span class="rc-date">5 Nov 2026</span>
-                  <span class="rc-what">Thin market</span>
-                  <span class="rc-val" data-run="replay">Replay</span>
-                </button>
-                <button class="replay-card" type="button" id="replay-deep" title="7 Nov 2026, a deeper market">
-                  <span class="rc-date">7 Nov 2026</span>
-                  <span class="rc-what">Deeper market</span>
-                  <span class="rc-val" data-run="replay-deep">Replay</span>
-                </button>
-              </div>
+            <div class="plan-head" id="plan-head">
+              <p class="group-label">Plan preview</p>
+              <p class="plan-caption" id="plan-caption">Waiting for the 1Click token list.</p>
+              <button class="btn ghost small" type="button" id="plan-redraw">Draw again</button>
             </div>
+            <svg id="timeline" viewBox="0 0 720 330" role="img" aria-label="Slice timeline"></svg>
           </div>
           <ul class="legend" aria-label="Legend">
             <li><i class="k plan"></i>Planned</li>
@@ -228,9 +210,38 @@
             <li><i class="k wait"></i>Waited</li>
             <li><i class="k split"></i>Split</li>
             <li><i class="k skip"></i>Unfilled</li>
+            <li id="legend-cap"><i class="k cap"></i>Largest possible slice</li>
           </ul>
 
-          <div class="monitor-body">
+          <div class="idle" id="monitor-empty">
+            <ul class="plan-stats" id="plan-stats" aria-label="This plan"></ul>
+            <div class="idle-grid">
+              <div class="idle-replay">
+                <p class="idle-title">Nothing is working yet.</p>
+                <p>Press <b>Work this order</b>, or replay one of the two committed $500,000 runs, USDC on Arbitrum to SOL.</p>
+                <div class="replay-pair">
+                  <button class="replay-card" type="button" id="replay" title="5 Nov 2026, a thin market">
+                    <span class="rc-date">5 Nov 2026</span>
+                    <span class="rc-what">Thin market</span>
+                    <span class="rc-val" data-run="replay">Replay</span>
+                  </button>
+                  <button class="replay-card" type="button" id="replay-deep" title="7 Nov 2026, a deeper market">
+                    <span class="rc-date">7 Nov 2026</span>
+                    <span class="rc-what">Deeper market</span>
+                    <span class="rc-val" data-run="replay-deep">Replay</span>
+                  </button>
+                </div>
+              </div>
+              <ol class="next">
+                <li><b>Arrival.</b> Quote one slice and the whole order at once.</li>
+                <li><b>Slices.</b> Each fires at a random moment inside its own slot, at a random size.</li>
+                <li><b>Floor.</b> A slice fills only at or above the floor; otherwise it waits, splits or stays unfilled.</li>
+                <li><b>Report.</b> Compare the slices with doing it in one swap.</li>
+              </ol>
+            </div>
+          </div>
+
+          <div class="monitor-body" hidden>
             <ol class="tape" id="tape" aria-live="polite"></ol>
             <div class="result" id="result" hidden></div>
           </div>

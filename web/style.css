@@ -344,22 +344,43 @@ input[type="range"]:hover::-webkit-slider-thumb, input[type="range"]:focus-visib
 .stepper li.active { color: #03120e; background: var(--quiet); border-color: var(--quiet); box-shadow: 0 0 18px -4px var(--quiet-glow); }
 .clock { margin-left: auto; font: 500 14px var(--mono); color: var(--ink-2); }
 .timeline-wrap { position: relative; border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(180deg, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.1)); padding: 8px 6px 2px; }
-.timeline-wrap:has(> .empty:not([hidden])) #timeline { display: none; }
 #timeline { display: block; width: 100%; height: auto; }
-.empty {
-  display: grid;
-  justify-items: start;
+/* Idle monitor: one possible schedule for the ticket, the plan in numbers, replays and the steps of a run. */
+.plan-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; padding: 8px 8px 2px; }
+.plan-head .group-label { margin: 0; }
+.plan-caption { margin: 0; flex: 1 1 18em; color: var(--muted); font-size: 12.5px; }
+.tl .ghost.plan { fill: rgba(233, 238, 244, 0.045); }
+.tl .cap { stroke: var(--quiet); stroke-dasharray: 5 4; opacity: 0.6; }
+.tl .cap-label { fill: var(--quiet); font: 500 11px var(--mono); opacity: 0.9; }
+.k.cap { height: 0; border-top: 1px dashed var(--quiet); border-radius: 0; vertical-align: 3px; }
+/* The monitor is never shorter than the ticket beside it; while idle, its last row takes up the rest. */
+.monitor { align-self: stretch; }
+.idle { display: grid; gap: 14px; flex: 1; grid-template-rows: auto minmax(0, 1fr); }
+.plan-stats { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 12px; background: rgba(0, 0, 0, 0.16); }
+.plan-stats li { display: grid; gap: 4px; align-content: start; padding: 14px 16px; min-width: 0; }
+.plan-stats li + li { border-left: 1px solid var(--line); }
+.ps-k { font: 500 10.5px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.plan-stats b { font: 500 17px/1.2 var(--mono); color: var(--ink); overflow-wrap: anywhere; }
+.ps-n { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.idle-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 14px; }
+.idle-replay {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 10px;
-  padding: clamp(18px, 3vw, 32px);
+  padding: 20px;
   color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 12px;
   background:
     linear-gradient(90deg, transparent 0 calc(100% - 1px), var(--line) calc(100% - 1px)) 0 0 / 48px 100%,
     linear-gradient(180deg, transparent 0 calc(100% - 1px), var(--line) calc(100% - 1px)) 0 0 / 100% 48px;
-  border-radius: 10px;
 }
-.empty p { margin: 0; max-width: 34em; }
-.empty b { color: var(--ink-2); font-weight: 500; }
-.empty-title { font: 400 clamp(26px, 2.6vw, 34px)/1.05 var(--serif); color: var(--ink) !important; letter-spacing: -0.01em; }
+.idle-replay p { margin: 0; max-width: 34em; }
+.idle-replay b { color: var(--ink-2); font-weight: 500; }
+.idle-title { font: 400 clamp(24px, 2.2vw, 30px)/1.05 var(--serif); color: var(--ink) !important; letter-spacing: -0.01em; }
+.idle-replay .replay-pair { margin-top: auto; width: 100%; }
+.idle .next { padding: 20px; border: 1px solid var(--line); border-radius: 12px; align-content: space-between; gap: 12px; font-size: 13px; }
 .replay-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 220px)); gap: 10px; margin-top: 8px; }
 .replay-card {
   display: grid;
@@ -596,12 +617,19 @@ h1 .line:nth-child(2) > span { animation-delay: 0.12s; }
   .desk-section { padding-top: 64px; }
   .chain, .live { padding: 56px 0; }
   .replay-pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); width: 100%; }
+  .idle-grid { grid-template-columns: minmax(0, 1fr); }
+  .plan-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .plan-stats li:nth-child(3) { border-left: 0; }
+  .plan-stats li:nth-child(n + 3) { border-top: 1px solid var(--line); }
+  /* At phone width the SVG text shrinks below reading size; the legend names the cap line instead. */
+  .tl .cap-label { display: none; }
 }
 @media (max-width: 480px) {
   .impact-head { flex-wrap: wrap; }
   .eyebrow { font-size: 10px; letter-spacing: 0.06em; }
   .eyebrow span { margin: 0 3px; }
-  .empty { padding: 14px; gap: 8px; }
+  .idle-replay, .idle .next { padding: 14px; gap: 8px; }
+  .plan-stats li { padding: 12px; }
   .replay-pair { grid-template-columns: minmax(0, 1fr); }
   table.privacy-table th, table.privacy-table td { padding-left: 4px; padding-right: 4px; }
   table.privacy-table td { font-size: 11.5px; }

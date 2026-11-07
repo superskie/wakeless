@@ -3,7 +3,8 @@
 // no wallet: quotes are live, fills are simulated.
 import { createOneClick, intentsQuoteBody, normalizeQuote } from '../src/oneclick.mjs';
 import { prepareOrder } from '../src/order.mjs';
-import { runOrder } from '../src/engine.mjs';
+import { runOrder, scheduleFor } from '../src/engine.mjs';
+import { largestPossibleSlice } from '../src/schedule.mjs';
 import { dryExecutor } from '../src/executors/dry.mjs';
 import { realClock } from '../src/clock.mjs';
 import { buildReport } from '../src/report.mjs';
@@ -36,7 +37,9 @@ const DRY_ACCOUNT = 'dry-run.wakeless.near';
 const $ = (selector) => document.querySelector(selector);
 const SVG = 'http://www.w3.org/2000/svg';
 const client = createOneClick();
-const state = { tokens: null, busy: false, impactBusy: false, precheckBusy: false, targetUsd: 500_000, lastRun: null };
+const newSeed = () => crypto.getRandomValues(new Uint32Array(1))[0] >>> 1;
+// `idle`: the monitor shows the plan preview until the first run or replay starts.
+const state = { tokens: null, busy: false, impactBusy: false, precheckBusy: false, targetUsd: 500_000, lastRun: null, idle: true, planSeed: newSeed() };
 
 // ---------- small helpers ----------
 
@@ -77,6 +80,9 @@ const human = (units, decimals) => toNumber(BigInt(units), decimals);
 const compact = (value) =>
   value >= 1e6 ? `${num(value / 1e6, 1)}M` : value >= 1e3 ? `${num(value / 1e3, value >= 1e4 ? 0 : 1)}k` : num(value, value >= 10 ? 0 : 2);
 const digitsFor = (price) => (price >= 1000 ? 4 : price >= 10 ? 3 : price >= 0.5 ? 2 : 0);
+// Token amounts: whole units when large, three significant digits when small (0.00096 ETH).
+const qty = (value) =>
+  !(value > 0) ? num(value, 0) : value >= 100 ? num(value, 0) : value >= 1 ? num(value, 2) : num(value, Math.min(10, 2 - Math.floor(Math.log10(value))));
 
 // ---------- status, assets, ticket ----------
 
@@ -207,6 +213,11 @@ function wireTicket() {
   $('#adverse').addEventListener('input', () => {
     $('#adverse-out').textContent = `${$('#adverse').value} bps`;
     syncRange($('#adverse'));
+    renderPlan();
+  });
+  $('#plan-redraw').addEventListener('click', () => {
+    state.planSeed = newSeed();
+    renderPlan();
   });
   for (const range of document.querySelectorAll('input[type="range"]')) syncRange(range);
   $('#impact-refresh').addEventListener('click', measureImpact);
@@ -403,6 +414,88 @@ async function measureImpact() {
 
 // ---------- execution monitor ----------
 
+/** Geometry of the timeline SVG; keep the viewBox in index.html in step (720 x 330). */
+const TL = Object.freeze({ W: 720, H: 330, L: 52, R: 12, T: 14, B: 30 });
+
+/** Minute grid, two size labels and the baseline, shared by the plan preview and the run. */
+function drawAxes(root, { x, horizon, maxAmount }) {
+  const plotH = TL.H - TL.T - TL.B;
+  const g = svg('g', { class: 'tl grid axis' }, root);
+  const minutes = horizon / 60_000;
+  const step = [1, 2, 5, 10, 15, 30, 60].find((s) => minutes / s <= 7) ?? 60;
+  for (let m = 0; m <= minutes + 1e-9; m += step) {
+    const px = x(m * 60_000);
+    svg('line', { x1: px, x2: px, y1: TL.T, y2: TL.T + plotH }, g);
+    svg('text', { x: px, y: TL.H - 10, 'text-anchor': 'middle' }, g).textContent = `${m}m`;
+  }
+  for (const frac of [0.5, 1]) {
+    const py = TL.T + plotH - frac * plotH;
+    svg('text', { x: TL.L - 8, y: py + 4, 'text-anchor': 'end' }, g).textContent = maxAmount >= 10 ? compact(maxAmount * frac) : qty(maxAmount * frac);
+  }
+  svg('line', { x1: TL.L, x2: TL.W - TL.R, y1: TL.T + plotH, y2: TL.T + plotH, stroke: 'rgba(233,238,244,0.2)' }, g);
+}
+
+/**
+ * Until the first run, the monitor draws one possible schedule for the ticket,
+ * with the same function the run uses, under the largest slice any draw of
+ * this order can reach (the cap a live wallet holds the order to).
+ */
+function renderPlan() {
+  if (!state.idle) return;
+  const root = $('#timeline');
+  const stats = $('#plan-stats');
+  const caption = $('#plan-caption');
+  root.textContent = '';
+  stats.textContent = '';
+  let order;
+  let schedule;
+  try {
+    if (!state.tokens) throw new Error(caption.dataset.down ?? 'Waiting for the 1Click token list.');
+    order = prepareOrder(currentSpec(), state.tokens);
+    schedule = scheduleFor(order, mulberry32(state.planSeed));
+  } catch (err) {
+    caption.textContent = err.message.charAt(0).toUpperCase() + err.message.slice(1);
+    return;
+  }
+
+  const { decimals, symbol, price } = order.sell;
+  const horizon = order.horizonMs;
+  const total = human(order.totalUnits, decimals);
+  const ceiling = human(order.slices > 1 ? largestPossibleSlice({ total: order.totalUnits, slices: order.slices, sizeJitter: order.sizeJitter }) : order.totalUnits, decimals);
+  const maxAmount = ceiling * 1.12;
+  const plotW = TL.W - TL.L - TL.R;
+  const plotH = TL.H - TL.T - TL.B;
+  const x = (t) => TL.L + (Math.min(Math.max(t, 0), horizon) / horizon) * plotW;
+  const y = (amount) => TL.T + plotH - (amount / maxAmount) * plotH;
+
+  drawAxes(root, { x, horizon, maxAmount });
+  const g = svg('g', { class: 'tl' }, root);
+  const bw = Math.max(4, Math.min(20, (plotW / order.slices) * 0.42));
+  for (const s of schedule) {
+    const top = Math.min(y(human(s.amount, decimals)), TL.T + plotH - 2);
+    svg('rect', { x: x(s.atMs) - bw / 2, y: top, width: bw, height: TL.T + plotH - top, rx: 3, class: 'ghost plan' }, g);
+  }
+  const capY = y(ceiling);
+  svg('line', { class: 'cap', x1: TL.L, x2: TL.W - TL.R, y1: capY, y2: capY }, g);
+  svg('text', { class: 'cap-label', x: TL.W - TL.R - 4, y: capY - 6, 'text-anchor': 'end' }, g).textContent = `largest possible slice ${qty(ceiling)} ${symbol}`;
+
+  const usd = (amount) => (price > 0 ? `about $${num(amount * price, 0)}` : null);
+  const seconds = Math.round(horizon / order.slices / 1000);
+  const every = seconds >= 60 ? `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, '0')}s` : `${seconds}s`;
+  const minutes = horizon / 60_000;
+  const span = minutes >= 60 ? `${minutes / 60} hour${minutes > 60 ? 's' : ''}` : `${minutes} minutes`;
+  const stat = (label, value, note) =>
+    html('li', {}, [html('span', { class: 'ps-k', text: label }), html('b', { text: value }), note ? html('span', { class: 'ps-n', text: note }) : null]);
+  stats.append(
+    stat('Average slice', `${qty(total / order.slices)} ${symbol}`, usd(total / order.slices)),
+    stat('Largest possible', `${qty(ceiling)} ${symbol}`, `${num((ceiling / total) * 100, 0)}% of the order; a live wallet is capped here`),
+    stat('A slice every', every, 'on average, at a random moment'),
+    stat('Floor', `${order.maxAdverseBps} bps`, 'under the arrival price'),
+  );
+  caption.textContent = `One possible schedule for this ticket: ${order.slices} slices over ${span}. Each run draws its own.`;
+  $('#clock').textContent = `00:00 / ${mmss(horizon)}`;
+}
+
 function startMonitor({ speed }) {
   const root = $('#timeline');
   const tape = $('#tape');
@@ -413,15 +506,14 @@ function startMonitor({ speed }) {
   result.hidden = true;
   result.textContent = '';
   body.classList.remove('has-result');
+  body.hidden = false;
   $('#monitor-empty').hidden = true;
+  $('#plan-head').hidden = true;
+  $('#legend-cap').hidden = true;
+  state.idle = false;
   setStep('arrival');
 
-  const W = 720;
-  const H = 230;
-  const L = 52;
-  const R = 12;
-  const T = 14;
-  const B = 30;
+  const { W, H, L, R, T, B } = TL;
   const plotW = W - L - R;
   const plotH = H - T - B;
   let order = null;
@@ -439,19 +531,7 @@ function startMonitor({ speed }) {
   const barWidth = () => Math.max(4, Math.min(20, (plotW / order.slices) * 0.42));
 
   function axes() {
-    const g = svg('g', { class: 'tl grid axis' }, root);
-    const minutes = horizon / 60_000;
-    const step = [1, 2, 5, 10, 15, 30, 60].find((s) => minutes / s <= 7) ?? 60;
-    for (let m = 0; m <= minutes + 1e-9; m += step) {
-      const px = x(m * 60_000);
-      svg('line', { x1: px, x2: px, y1: T, y2: T + plotH }, g);
-      svg('text', { x: px, y: H - 10, 'text-anchor': 'middle' }, g).textContent = `${m}m`;
-    }
-    for (const frac of [0.5, 1]) {
-      const py = T + plotH - frac * plotH;
-      svg('text', { x: L - 8, y: py + 4, 'text-anchor': 'end' }, g).textContent = compact(maxAmount * frac);
-    }
-    svg('line', { x1: L, x2: W - R, y1: T + plotH, y2: T + plotH, stroke: 'rgba(233,238,244,0.2)' }, g);
+    drawAxes(root, { x, horizon, maxAmount });
     bars = svg('g', { class: 'tl' }, root);
     nowLine = svg('line', { class: 'tl now', x1: L, x2: L, y1: T - 4, y2: T + plotH }, root);
   }
@@ -725,6 +805,8 @@ async function replay(file) {
 // ---------- what the chain sees ----------
 
 function renderChain() {
+  // The plan preview follows the same ticket inputs.
+  renderPlan();
   const spec = currentSpec();
   const total = Number(spec.amount);
   if (!(total > 0)) return;
@@ -1053,6 +1135,8 @@ async function init() {
   if (!res.ok || !Array.isArray(res.json)) {
     setStatus('down', '1Click unreachable. The replay still works.');
     $('#impact-note').textContent = 'Live quotes are unavailable right now.';
+    $('#plan-caption').dataset.down = '1Click is unreachable, so there is no token list to plan with. The replays still work.';
+    renderPlan();
     return;
   }
   state.tokens = res.json;
