@@ -387,6 +387,62 @@ input[type="range"]:hover::-webkit-slider-thumb, input[type="range"]:focus-visib
 .js .reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.8s var(--ease), transform 0.8s var(--ease); transition-delay: var(--d, 0ms); }
 .js .reveal.in { opacity: 1; transform: none; }
 
+/* ---------- live mode ---------- */
+.ticket-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+/* The live steps make the ticket taller than a screen, so it scrolls with the page. */
+body[data-mode="live"] .ticket { position: static; }
+.live { display: grid; gap: 12px; padding-top: 14px; border-top: 1px solid var(--line); min-width: 0; }
+.live-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.live-load { cursor: pointer; }
+.live-load input { display: none; }
+.live-note { margin: 0; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid rgba(255, 122, 107, 0.3); background: rgba(255, 122, 107, 0.06); color: var(--ink-2); font-size: 12.5px; line-height: 1.5; }
+.live-steps { list-style: none; margin: 0; padding: 0; display: grid; counter-reset: step; }
+.live-step { position: relative; display: grid; gap: 8px; min-width: 0; padding: 0 0 18px 32px; counter-increment: step; transition: opacity 0.2s; }
+.live-step::before { content: counter(step); position: absolute; left: 0; top: 0; width: 21px; height: 21px; border-radius: 50%; border: 1px solid var(--line-3); display: grid; place-items: center; font: 500 11px/1 var(--mono); color: var(--ink-2); background: var(--bg-2); }
+.live-step::after { content: ""; position: absolute; left: 10px; top: 25px; bottom: 4px; width: 1px; background: var(--line-2); }
+.live-step:last-child { padding-bottom: 4px; }
+.live-step:last-child::after { display: none; }
+.live-step[data-state="done"]::before { content: "\2713"; color: #03120e; background: var(--quiet); border-color: var(--quiet); }
+.live-step[data-state="off"] { opacity: 0.42; }
+.live-step-title { margin: 0; color: var(--ink); font-size: 13.5px; font-weight: 500; line-height: 21px; }
+.live-step .hint, .live-step .field { margin: 0; }
+.live-row { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.live-row .btn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.live-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line-2);
+  background: var(--bg-2);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+  font: 500 12.5px var(--mono);
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.live-input:focus { border-color: rgba(94, 224, 193, 0.55); box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45), 0 0 0 3px rgba(94, 224, 193, 0.1); }
+.live-input:disabled { opacity: 0.8; cursor: default; }
+.live-rules { margin: 0; padding-left: 16px; display: grid; gap: 5px; color: var(--ink-2); font-size: 12.5px; line-height: 1.5; }
+.live-rules .bad { color: var(--exposed); list-style: none; margin-left: -16px; }
+.live-sigs { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+.live-sigs:empty { display: none; }
+.live-sigs li[data-state="now"] { color: var(--ink); }
+.live-sigs li[data-state="done"] { color: var(--quiet); }
+.live-fund { display: grid; gap: 8px; min-width: 0; }
+.live-address { display: block; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--line-2); background: var(--bg-2); font: 500 13px/1.45 var(--mono); color: var(--ink); overflow-wrap: anywhere; }
+.live-address:empty { display: none; }
+.live-wallets { display: flex; flex-wrap: wrap; gap: 8px; }
+.live-wallets:empty { display: none; }
+.live-wallets .btn { gap: 8px; }
+.live-wallets img { border-radius: 4px; }
+#live-run { width: 100%; min-height: 48px; }
+.live-foot:has(> :not([hidden])) { padding-top: 12px; border-top: 1px solid var(--line); }
+.live .hint a { color: var(--quiet); }
+.live .error { margin: 0; }
+.live .error:empty { display: none; }
+
 @media (max-width: 1080px) {
   .desk { grid-template-columns: minmax(0, 1fr); }
   .ticket { position: static; }

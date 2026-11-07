@@ -13,6 +13,8 @@ import { mulberry32 } from '../src/rng.mjs';
 import { resolveAsset } from '../src/assets.mjs';
 import { memoryJournal, parseJsonl, toJsonl } from '../src/memory-journal.mjs';
 import { toNumber } from '../src/units.mjs';
+import { HOSTED } from '../src/agent/hosted.mjs';
+import { createLive, LIVE_ASSETS } from './live.mjs';
 
 // Two committed $500k runs of the same order: a thin market and a deeper one.
 const SAMPLE_RUNS = {
@@ -28,7 +30,13 @@ const SVG = 'http://www.w3.org/2000/svg';
 const client = createOneClick();
 const newSeed = () => crypto.getRandomValues(new Uint32Array(1))[0] >>> 1;
 // `idle`: the monitor shows the plan preview until the first run or replay starts.
-const state = { tokens: null, busy: false, precheckBusy: false, targetUsd: 500_000, lastRun: null, idle: true, planSeed: newSeed() };
+const state = { tokens: null, busy: false, precheckBusy: false, targetUsd: 500_000, lastRun: null, idle: true, planSeed: newSeed(), mode: 'sim', lockedSpec: null };
+// Simulated orders are sized for the price impact they show; live ones stay under the hosted cap.
+const MODES = {
+  sim: { assets: ASSETS, pair: ['usdc:arb', 'sol:sol'], chips: [100_000, 250_000, 500_000, 1_000_000], usd: 500_000, windows: [10, 30, 60, 120], window: 30, slices: [1, 64, 16] },
+  live: { assets: LIVE_ASSETS, pair: ['eth:base', 'sol:sol'], chips: [10, 25, HOSTED.maxOrderUsd], usd: 25, windows: [5, 10, 15, 30], window: 10, slices: [HOSTED.minSlices, HOSTED.maxSlices, 4] },
+};
+let liveDesk = null;
 
 // ---------- small helpers ----------
 
@@ -82,12 +90,12 @@ function setStatus(kind, text, wide = '') {
   if (wide) node.append(html('span', { class: 'wide', text: wide }));
 }
 
-function populateAssets(tokens) {
+function populateAssets(tokens, refs = MODES[state.mode].assets, [sellRef, buyRef] = MODES[state.mode].pair) {
   const sell = $('#sell');
   const buy = $('#buy');
   sell.textContent = '';
   buy.textContent = '';
-  for (const ref of ASSETS) {
+  for (const ref of refs) {
     let asset;
     try {
       asset = resolveAsset(tokens, ref);
@@ -98,8 +106,8 @@ function populateAssets(tokens) {
     sell.append(html('option', { value: ref, text: label }));
     buy.append(html('option', { value: ref, text: label }));
   }
-  sell.value = 'usdc:arb';
-  buy.value = 'sol:sol';
+  sell.value = sellRef;
+  buy.value = buyRef;
 }
 
 function selected(which) {
@@ -142,7 +150,8 @@ function currentSpec() {
     horizonMinutes: Number($('#window').value),
     maxAdverseBps: Number($('#adverse').value),
     maxDefers: 2,
-    minSliceUsd: 1000,
+    // Live orders are $10 to $50, so their slices are a few dollars each.
+    minSliceUsd: state.mode === 'live' ? 0.5 : 1000,
     deskAccount: DRY_ACCOUNT,
   };
 }
@@ -164,8 +173,17 @@ function setBusy(busy, label) {
 function wireTicket() {
   $('#ticket').addEventListener('submit', (event) => {
     event.preventDefault();
-    runLive();
+    // In live mode the run starts from its own step, never from Enter in a field.
+    if (state.mode === 'sim') runLive();
   });
+  for (const radio of document.querySelectorAll('input[name="mode"]')) {
+    radio.addEventListener('change', () => radio.checked && applyMode(radio.value));
+  }
+  for (const type of ['input', 'change']) {
+    $('#ticket').addEventListener(type, (event) => {
+      if (state.mode === 'live' && !event.target.closest('#live')) liveDesk?.render();
+    });
+  }
   for (const [id, file] of Object.entries(SAMPLE_RUNS)) $(`#${id}`).addEventListener('click', () => replay(file));
   $('#sell').addEventListener('change', () => {
     setAmountFromUsd(state.targetUsd);
@@ -659,20 +677,96 @@ async function runLive() {
     showError(err.message);
     return;
   }
-  const speed = currentSpeed();
-  const seed = crypto.getRandomValues(new Uint32Array(1))[0] >>> 1;
+  await workOrder({ order, client, executor: dryExecutor(), speed: currentSpeed() }).catch(() => {});
+}
+
+/**
+ * Runs one order in the monitor: simulated fills, or live swaps through the
+ * agent wallet. Same engine either way; live mode passes its own quote client
+ * and executor and runs in real time. Resolves with the journal's events.
+ */
+async function workOrder({ order, client: quotes, executor, speed = 1, seed = newSeed(), label = 'Working the order', walletCap }) {
   const journal = memoryJournal();
-  setBusy(true, 'Working the order');
+  setBusy(true, label);
   scrollToDesk();
   const view = startMonitor({ speed });
   try {
-    await runOrder({ order, client, executor: dryExecutor(), clock: realClock({ speed }), journal, rand: mulberry32(seed), seed, onEvent: view.onEvent });
+    await runOrder({ order, client: quotes, executor, clock: realClock({ speed }), journal, rand: mulberry32(seed), seed, walletCap, onEvent: view.onEvent });
     view.finish(journal.events);
+    return journal.events;
   } catch (err) {
     view.fail(err.message);
+    throw err;
   } finally {
     setBusy(false);
   }
+}
+
+// ---------- modes ----------
+
+function setWindowOptions(minutes, selected) {
+  const select = $('#window');
+  select.textContent = '';
+  for (const m of minutes) select.append(html('option', { value: String(m), text: m < 60 ? `${m} minutes` : m === 60 ? '1 hour' : `${m / 60} hours` }));
+  select.value = String(selected);
+}
+
+function setChips(values) {
+  const chips = [...document.querySelectorAll('#chips button')];
+  chips.forEach((chip, i) => {
+    chip.hidden = i >= values.length;
+    if (i >= values.length) return;
+    chip.dataset.usd = String(values[i]);
+    chip.textContent = `$${values[i] >= 1e6 ? `${values[i] / 1e6}M` : values[i] >= 1e3 ? `${values[i] / 1e3}k` : values[i]}`;
+  });
+}
+
+function applyMode(mode) {
+  if (state.busy || liveDesk?.running) return;
+  state.mode = mode;
+  const m = MODES[mode];
+  const live = mode === 'live';
+  document.body.dataset.mode = mode;
+  $('#run').hidden = live;
+  $('#precheck').hidden = live;
+  document.querySelector('.speed').hidden = live;
+  setChips(m.chips);
+  setWindowOptions(m.windows, m.window);
+  const [min, max, start] = m.slices;
+  $('#slices').min = String(min);
+  $('#slices').max = String(max);
+  setSlices(start);
+  clearPrecheck();
+  showError('');
+  if (state.tokens) {
+    populateAssets(state.tokens);
+    setAmountFromUsd(m.usd);
+  }
+  if (live) liveDesk.show();
+  else liveDesk.hide();
+  renderPlan();
+}
+
+/** Once an agent wallet exists its signed limits fix the order, so the ticket shows that order and locks. */
+function lockTicket(spec) {
+  const key = spec ? JSON.stringify(spec) : null;
+  if (key === state.lockedSpec) return;
+  state.lockedSpec = key;
+  const fields = ['#sell', '#buy', '#flip', '#amount', '#slices', '#window', '#adverse', ...document.querySelectorAll('#chips button')];
+  for (const f of fields) (typeof f === 'string' ? $(f) : f).disabled = Boolean(spec);
+  if (!spec) return;
+  $('#sell').value = spec.sell;
+  $('#buy').value = spec.buy;
+  $('#amount').value = spec.amount;
+  if (![...$('#window').options].some((o) => o.value === String(spec.horizonMinutes))) {
+    $('#window').append(html('option', { value: String(spec.horizonMinutes), text: `${spec.horizonMinutes} minutes` }));
+  }
+  $('#window').value = String(spec.horizonMinutes);
+  $('#adverse').value = String(spec.maxAdverseBps);
+  $('#adverse-out').textContent = `${spec.maxAdverseBps} bps`;
+  syncRange($('#adverse'));
+  setSlices(spec.slices);
+  syncAmountHint();
 }
 
 async function replay(file) {
@@ -745,6 +839,12 @@ function startMotion() {
 // ---------- start ----------
 
 async function init() {
+  liveDesk = createLive({
+    ticket: currentSpec,
+    contractOf: (assetId) => state.tokens?.find((t) => t.assetId === assetId)?.contractAddress ?? null,
+    lockTicket,
+    workOrder,
+  });
   wireTicket();
   renderPlan();
   startMotion();

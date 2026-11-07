@@ -3,7 +3,7 @@
 // sale beyond the order in a day, whatever the desk sends. The Agent API
 // counts both per asset (`limits.per_transaction` and `limits.daily`, in
 // atomic units) across every grant. Pure functions, so every rule has a test.
-import { largestPossibleSlice } from '../src/schedule.mjs';
+import { largestPossibleSlice } from '../schedule.mjs';
 
 /** The cap an order needs: per swap, the largest slice any seed can draw; per day, the order. */
 export function capFor(order) {

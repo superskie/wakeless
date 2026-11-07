@@ -12,9 +12,9 @@ import { mulberry32 } from '../src/rng.mjs';
 import { fromUnits } from '../src/units.mjs';
 import { describeEvent } from '../src/describe.mjs';
 import { agentApi, readEnv, required, ROOT } from './lib.mjs';
-import { agentQuoteClient, priceBook } from './quote-client.mjs';
-import { agentExecutor } from './executor.mjs';
-import { checkSliceCap } from './cap.mjs';
+import { agentQuoteClient, priceBook } from '../src/agent/quotes.mjs';
+import { agentExecutor } from '../src/executors/agent.mjs';
+import { checkSliceCap } from '../src/agent/cap.mjs';
 
 const USAGE = `Usage:
   node live/run.mjs <order.json> [--speed <n>] [--seed <n>] [--journal <file>]

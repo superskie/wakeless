@@ -4,8 +4,8 @@
 // at the agent's own preview and nothing is submitted.
 //
 // No SDK import here: the API clients are passed in, so tests use fakes.
-import { minOutAtRate } from '../src/units.mjs';
-import { waitForStatus } from './status.mjs';
+import { minOutAtRate } from '../units.mjs';
+import { waitForStatus } from '../agent/status.mjs';
 
 /** Refusals that will not go away by waiting: stop and let a person look. */
 const HARD_REFUSAL = /denied|exceeded|insufficient|frozen|revoked|expired|unauthori[sz]ed|forbidden/i;

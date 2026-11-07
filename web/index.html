@@ -59,7 +59,13 @@
     <section class="desk-section" id="desk">
       <div class="desk">
         <form class="ticket card reveal" id="ticket" novalidate>
-          <h3>Order ticket</h3>
+          <div class="ticket-head">
+            <h3>Order ticket</h3>
+            <span class="segmented mode" role="radiogroup" aria-label="Mode">
+              <label title="Live 1Click quotes, simulated fills. No wallet."><input type="radio" name="mode" value="sim" checked><span>Simulate</span></label>
+              <label title="Real funds on mainnet from your own wallet, capped at $50."><input type="radio" name="mode" value="live"><span>Live</span></label>
+            </span>
+          </div>
 
           <div class="group">
             <p class="group-label">Pair</p>
@@ -126,6 +132,77 @@
               </span>
             </fieldset>
           </div>
+
+          <section class="live" id="live" hidden aria-labelledby="live-title">
+            <div class="live-head">
+              <p class="group-label" id="live-title">Live on mainnet</p>
+              <label class="btn ghost small live-load" title="Come back to an agent wallet saved earlier">Load saved wallet<input type="file" id="live-load" accept="application/json,.json"></label>
+            </div>
+            <p class="live-note">Real funds through NEAR Intents, on code with no audit yet. Orders are capped at $50, and your own wallet signs every rule.</p>
+            <ol class="live-steps">
+              <li class="live-step" id="ls-wallet">
+                <p class="live-step-title">Connect a wallet</p>
+                <p class="hint" id="live-account"></p>
+                <div class="live-wallets" id="live-wallets"></div>
+                <div class="live-row"><button class="btn small" type="button" id="live-connect">Connect wallet</button></div>
+              </li>
+              <li class="live-step" id="ls-where">
+                <p class="live-step-title">Where the funds go</p>
+                <label class="field">
+                  <span class="field-label" id="live-receive-label">Receive at</span>
+                  <input class="live-input" id="live-receive" autocomplete="off" spellcheck="false" placeholder="Address">
+                  <span class="hint" id="live-receive-hint"></span>
+                </label>
+                <label class="field">
+                  <span class="field-label" id="live-refund-label">Send anything unsold back to</span>
+                  <input class="live-input" id="live-refund" autocomplete="off" spellcheck="false" placeholder="Address">
+                  <span class="hint" id="live-refund-hint"></span>
+                </label>
+              </li>
+              <li class="live-step" id="ls-create">
+                <p class="live-step-title">Create the agent wallet</p>
+                <ul class="live-rules" id="live-rules"></ul>
+                <p class="hint" id="live-made" hidden></p>
+                <div class="live-row">
+                  <button class="btn small" type="button" id="live-create">Create it: 3 signatures, no gas</button>
+                  <button class="btn small" type="button" id="live-regrant" hidden>Sign a grant for this tab</button>
+                </div>
+                <ol class="live-sigs" id="live-sigs"></ol>
+              </li>
+              <li class="live-step" id="ls-fund">
+                <p class="live-step-title">Fund it</p>
+                <div class="live-fund" id="live-fund" hidden>
+                  <p class="hint" id="live-send"></p>
+                  <code class="live-address" id="live-deposit"></code>
+                  <div class="live-row">
+                    <button class="btn ghost small" type="button" id="live-copy">Copy address</button>
+                    <button class="btn small" type="button" id="live-send-wallet" hidden>Send from this wallet</button>
+                  </div>
+                  <p class="hint" id="live-sent"></p>
+                  <p class="hint" id="live-balance"></p>
+                </div>
+              </li>
+              <li class="live-step" id="ls-run">
+                <p class="live-step-title">Work the order</p>
+                <button class="btn primary" type="button" id="live-run">Work this order live</button>
+                <p class="hint" id="live-run-hint"></p>
+              </li>
+              <li class="live-step" id="ls-out">
+                <p class="live-step-title">Take it out</p>
+                <div class="live-row">
+                  <button class="btn small" type="button" id="live-withdraw" hidden>Withdraw</button>
+                  <button class="btn ghost small" type="button" id="live-return" hidden>Return</button>
+                </div>
+                <p class="hint" id="live-out"></p>
+              </li>
+            </ol>
+            <div class="live-row live-foot">
+              <button class="btn ghost small" type="button" id="live-freeze" hidden>Freeze the wallet</button>
+              <button class="btn ghost small" type="button" id="live-save" hidden>Save wallet details</button>
+              <button class="btn ghost small" type="button" id="live-forget" hidden>Start over</button>
+            </div>
+            <p class="error" id="live-error" role="alert"></p>
+          </section>
 
           <div class="precheck" id="precheck">
             <div class="precheck-head">

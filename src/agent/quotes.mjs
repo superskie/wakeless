@@ -2,7 +2,7 @@
 // and checked against its signed policy. Responses are shaped like 1Click
 // quotes, so the engine, the guard and the report treat a live slice exactly
 // like a dry-run one, and the guard judges the route the swap will really take.
-import { toNumber } from '../src/units.mjs';
+import { toNumber } from '../units.mjs';
 
 /** Agent API token list in the shape the order code expects. */
 export function toDeskTokens(list) {

@@ -347,6 +347,88 @@ executions." and the desk stopped:
 [examples/freeze-run-chain.json](examples/freeze-run-chain.json). The owner
 unfroze the wallet at 12:28:10 (revision 6).
 
+### Live mode on the hosted desk
+
+The web desk works a live order too, owned by the visitor's own wallet instead
+of a key in `.env`. Choose Live in the order ticket:
+
+1. Connect an EVM wallet (any EIP-6963 wallet, or `window.ethereum`). It signs
+   rules and pays no gas.
+2. Name a receive address on the bought asset's chain, and a return address on
+   the sold asset's chain for anything unsold. They become the wallet's only
+   two withdrawal destinations.
+3. Create the agent wallet with three signatures: a `personal_sign` sign-in,
+   from which the page recovers the wallet's public key (the Agent API wants it
+   for an EVM owner, `src/evm.mjs`); `agent_create` with the policy below; and
+   `grant_issue` for this tab, valid for the order plus an hour. The API builds
+   the EIP-712 payloads and the wallet signs them unchanged with
+   `eth_signTypedData_v4`; their domain has no chain id, so the wallet does not
+   switch networks.
+4. Fund it: send exactly the order amount to the confidential deposit address,
+   from any wallet or exchange. On an EVM chain the page offers to send it from
+   the connected wallet. The step shows the balance once it lands.
+5. Work the order: the engine, quote client and executor of `live/run.mjs`, in
+   real time, in this tab.
+6. Withdraw the bought asset to the receive address, and return anything
+   unsold.
+
+Freeze and Unfreeze are owner intents as well. A frozen wallet runs no swap
+and no withdrawal (`409 wallet_frozen`), so taking funds out after a freeze
+needs an unfreeze first.
+
+The policy a hosted order gets (`src/agent/hosted.mjs`):
+
+```json
+{
+  "actions": ["swap", "withdraw"],
+  "confidential": true,
+  "limits": {
+    "per_transaction": { "<sold asset>": "<largest slice the order can draw>" },
+    "daily": { "<sold asset>": "<the order>" }
+  },
+  "destinations": { "mode": "only", "list": ["<receive address>", "<return address>"] },
+  "budget": { "daily_usd": "150", "weekly_usd": null, "monthly_usd": null },
+  "max_actions_per_hour": 120
+}
+```
+
+The budget counts swaps and withdrawals alike, so it holds about three times
+the $50 order cap. The Agent API wants the partner key on every call and
+answers no CORS preflight, so the page calls `/api/agent/*` on its own origin
+and a Cloudflare Pages Function (`functions/api/agent/[[path]].js`, the
+handler in `src/agent/proxy.mjs`) adds the key from a Pages secret. It forwards
+only the ten calls the desk makes. It refuses owner intents that break the
+hosted rules: an order above $50 at the Agent API's price, a grant longer than
+24 hours, any action but swap and withdraw, more than two destinations, a
+budget above $150. It also refuses swaps and withdrawals that are not
+confidential, and limits each client address (best effort: each edge instance
+counts on its own). `npm run web` runs the same handler with the key from
+`.env`, and `npm test` covers its rules (`test/proxy.test.mjs`,
+`test/hosted.test.mjs`).
+
+What the cap does not replace: the site's code chooses the rules your wallet
+signs, so read the popup; the receive address appears inside the signed
+message. These are mainnet funds on code without an audit, and the cap keeps a
+mistake small.
+
+Checked on 8 November 2026 on the demo deployment, with throwaway owners and no
+funds. A local anvil played the wallet, signing `personal_sign` and
+`eth_signTypedData_v4` over JSON-RPC as a browser wallet does, first from a
+script and then from the page itself in Chrome:
+
+- the sign-in recovered the wallet's own address and key, and `agent_create`,
+  `grant_issue`, `agent_freeze` and `agent_unfreeze` ended `SUCCESS`;
+- the policy read back with the slice cap, both destinations and the $150
+  budget;
+- a dry swap of the whole order came back with
+  `policy_transaction_limit_exceeded`, a dry withdrawal to an unlisted address
+  with `invalid_address`, and any call while frozen with `wallet_frozen`;
+- the proxy refused a $500 wallet, a 30-day grant, a public-form swap and
+  `GET /v1/agents`, the list of every agent under the partner key.
+
+No funded order has run from the hosted desk yet; the funded run so far is the
+command line one below.
+
 ### The live run, 5 November 2026
 
 0.0025 ETH on Base (about $6) went to the agent's confidential deposit address
@@ -406,10 +488,16 @@ the deposit address, and later the way out to the owner's wallet.
 | `src/report.mjs` | Cost report rebuilt from a journal |
 | `src/precheck.mjs` | Pre-trade check: size penalty by slice count, advice |
 | `live/agent.mjs` | Agent lifecycle on the Agent API: owner, agent, grant, deposit, withdrawal rule, withdraw, slice cap, freeze |
-| `live/cap.mjs` | The slice cap an order needs, and whether the signed policy holds a run to it |
 | `live/run.mjs` | Works an order through the agent, preview or live |
-| `live/executor.mjs` | Submits a slice as a confidential swap with the floor as minimum output |
-| `live/quote-client.mjs` | The agent's swap preview as the price source |
+| `src/agent/cap.mjs` | The slice cap an order needs, and whether the signed policy holds a run to it |
+| `src/executors/agent.mjs` | Submits a slice as a confidential swap with the floor as minimum output (command line and web desk) |
+| `src/agent/quotes.mjs` | The agent's swap preview as the price source |
+| `src/agent/http.mjs` | Agent API client for the web desk, through the site's proxy, with the SDK's method names |
+| `src/agent/hosted.mjs` | Rules for live orders from the hosted site: the policy, the $50 cap, address checks |
+| `src/agent/proxy.mjs` | The site's Agent API proxy: an allowlist of calls, the hosted rules, limits per address |
+| `src/evm.mjs` | keccak-256, the public key behind a `personal_sign`, EIP-55, ERC-20 calldata; no dependencies |
+| `functions/api/agent/[[path]].js` | The proxy as a Cloudflare Pages Function, the partner key as a Pages secret |
+| `web/live.mjs`, `web/wallet.mjs` | Live mode of the web desk: the visitor's wallet as owner, deposit, run, withdraw, freeze |
 | `live/public-view.mjs` | The agent's public `intents.near` balances, next to its confidential ones |
 | `live/exit-check.mjs` | What a withdrawal address would link the order to, read from a public RPC |
 | `examples/` | Example orders, committed dry runs, an agent preview run, the live run, the cap check and the frozen run |

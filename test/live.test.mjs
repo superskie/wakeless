@@ -9,8 +9,8 @@ import { memoryJournal } from '../src/journal.mjs';
 import { buildReport, renderReport } from '../src/report.mjs';
 import { mulberry32 } from '../src/rng.mjs';
 import { fromUnits, minOutAtRate } from '../src/units.mjs';
-import { agentQuoteClient } from '../live/quote-client.mjs';
-import { agentExecutor } from '../live/executor.mjs';
+import { agentQuoteClient } from '../src/agent/quotes.mjs';
+import { agentExecutor } from '../src/executors/agent.mjs';
 import { TOKENS } from './helpers.mjs';
 
 const spec = {

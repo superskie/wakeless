@@ -76,6 +76,21 @@ fs.copyFileSync(path.join(webDir, '404.html'), path.join(OUT, '404.html'));
 // Cloudflare Pages reads _redirects: one address for the landing page, which
 // Pages would otherwise also serve as /web/home.
 fs.writeFileSync(path.join(OUT, '_redirects'), '/web/home.html / 301\n/web/home / 301\n');
+// Pages reads _headers too. The desk asks a wallet for signatures, so no other
+// site may frame it, and the page may only call its own proxy and 1Click.
+// Scripts are not restricted further: some wallet extensions inject theirs.
+fs.writeFileSync(
+  path.join(OUT, '_headers'),
+  [
+    '/*',
+    '  X-Frame-Options: DENY',
+    "  Content-Security-Policy: frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'; connect-src 'self' https://1click.chaindefuser.com; img-src 'self' data: blob:",
+    '  X-Content-Type-Options: nosniff',
+    '  Referrer-Policy: strict-origin-when-cross-origin',
+    '  Permissions-Policy: camera=(), microphone=(), geolocation=()',
+    '',
+  ].join('\n'),
+);
 
 const outside = files.filter((f) => !f.startsWith(webDir + path.sep)).map(rel);
 console.log(`site/: ${files.length} files, ${(bytes / 1024).toFixed(0)} KiB`);

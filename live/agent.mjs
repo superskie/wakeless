@@ -22,8 +22,8 @@ import { prepareOrder } from '../src/order.mjs';
 import { fromUnits } from '../src/units.mjs';
 import { agentApi, appendEnv, createOwnerKey, loadOwner, readEnv, required, runOwnerIntent, show, waitForStatus, wakelessPolicy } from './lib.mjs';
 import { describeExit, exitAddressHistory } from './exit-check.mjs';
-import { priceBook } from './quote-client.mjs';
-import { capFor, withSliceCap } from './cap.mjs';
+import { priceBook } from '../src/agent/quotes.mjs';
+import { capFor, withSliceCap } from '../src/agent/cap.mjs';
 
 /** Read an order file against the Agent API's token list. */
 async function loadOrder(api, file) {

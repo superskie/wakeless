@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { buildSchedule, largestPossibleSlice } from '../src/schedule.mjs';
 import { prepareOrder } from '../src/order.mjs';
 import { mulberry32 } from '../src/rng.mjs';
-import { capFor, checkSliceCap, withSliceCap } from '../live/cap.mjs';
+import { capFor, checkSliceCap, withSliceCap } from '../src/agent/cap.mjs';
 import { TOKENS } from './helpers.mjs';
 
 const max = (schedule) => schedule.reduce((m, s) => (s.amount > m ? s.amount : m), 0n);

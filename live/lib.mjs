@@ -5,7 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAgentApi } from '@near-intents-agent-api/sdk';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-import { waitForStatus } from './status.mjs';
+import { waitForStatus } from '../src/agent/status.mjs';
+import { readEnvFile } from '../src/env.mjs';
 
 export { waitForStatus };
 
@@ -14,24 +15,7 @@ export const ENV_FILE = path.join(ROOT, '.env');
 
 /** Parse .env (UTF-8 or UTF-16 LE) into an object without touching process.env. */
 export function readEnv(file = ENV_FILE) {
-  if (!fs.existsSync(file)) return {};
-  const buf = fs.readFileSync(file);
-  const text = buf[0] === 0xff && buf[1] === 0xfe ? buf.toString('utf16le') : buf.toString('utf8');
-  const out = {};
-  for (const raw of text.replace(/^\uFEFF/, '').split(/\r?\n/)) {
-    const line = raw.trim();
-    if (!line || line.startsWith('#')) continue;
-    const eq = line.indexOf('=');
-    if (eq < 1) continue;
-    let value = line.slice(eq + 1).trim();
-    if (/^(['"]).*\1$/.test(value)) value = value.slice(1, -1);
-    out[line.slice(0, eq).trim()] = value;
-  }
-  return { ...out, ...pick(process.env, Object.keys(out)) };
-}
-
-function pick(source, keys) {
-  return Object.fromEntries(keys.filter((k) => source[k] !== undefined && source[k] !== '').map((k) => [k, source[k]]));
+  return readEnvFile(file);
 }
 
 /** Append KEY=value lines to .env. Refuses to overwrite a key that already has a value. */
