@@ -142,9 +142,10 @@ export function agentProxy({ apiKey, upstream = DEFAULT_UPSTREAM, fetch: fetcher
 
     let res;
     try {
-      res = await fetcher(target, { method, headers, body, redirect: 'error', signal: AbortSignal.timeout(90_000) });
-    } catch {
-      return problem(502, 'upstream_unreachable', 'the Agent API did not answer');
+      // Workers' fetch takes only 'follow' or 'manual'; a redirect is passed back, never followed.
+      res = await fetcher(target, { method, headers, body, redirect: 'manual', signal: AbortSignal.timeout(90_000) });
+    } catch (err) {
+      return problem(502, 'upstream_unreachable', `the Agent API did not answer (${err?.name ?? 'error'})`);
     }
     return new Response(await res.text(), {
       status: res.status,
