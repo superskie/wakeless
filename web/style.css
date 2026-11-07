@@ -536,6 +536,11 @@ input[type="range"]:hover::-webkit-slider-thumb, input[type="range"]:focus-visib
 .live-table th.hash { text-align: right; }
 .live-table td.hash { font-size: 11.5px; color: var(--muted); }
 .live-table td.miss { color: var(--wait); }
+.rules-grid { margin-top: 18px; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+.rules-grid .live-table td:first-child { font-family: inherit; white-space: normal; }
+.rules-grid .live-table td .amt { display: block; margin-top: 3px; font: 400 12px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+/* Times here carry seconds; the phone rule for the live ledger sizes for HH:MM. */
+.live .rules-grid .ledger li { grid-template-columns: max-content minmax(0, 1fr); }
 
 /* Footer */
 .foot { max-width: 1240px; margin: 40px auto 0; padding: 48px var(--gutter) 56px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px 48px; align-items: end; }

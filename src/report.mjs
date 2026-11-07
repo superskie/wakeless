@@ -3,6 +3,19 @@ import { fromUnits, toNumber } from './units.mjs';
 
 const sumUnits = (rows, key) => rows.reduce((acc, row) => acc + BigInt(row[key]), 0n);
 
+/** The wallet's slice cap as journaled with the order, in whole units of the sold asset. */
+function walletCapOf(cap, sell) {
+  if (!cap) return null;
+  const whole = (raw) => (raw == null ? null : fromUnits(BigInt(raw), sell.decimals));
+  return {
+    revision: cap.revision ?? null,
+    reason: cap.reason ?? null,
+    perSwap: whole(cap.perSwap),
+    perDay: whole(cap.perDay),
+    largestSlice: whole(cap.largestSlice),
+  };
+}
+
 /**
  * Definitions (all in basis points of the input value):
  * - execution cost: each fill's all-in cost against the USD mid quoted with it,
@@ -85,6 +98,7 @@ export function buildReport(events) {
     aborted: Boolean(abort),
     abortMessage: abort?.message ?? null,
     halted: halt ? { slice: halt.sliceId, t: halt.t, status: halt.status, message: halt.message } : null,
+    walletCap: walletCapOf(orderEvent.walletCap, sell),
     sell: { ref: sell.ref, symbol: sell.symbol, chain: sell.blockchain },
     buy: { ref: buy.ref, symbol: buy.symbol, chain: buy.blockchain },
     total: fromUnits(totalUnits, sell.decimals),
@@ -190,6 +204,17 @@ export function renderReport(r) {
   );
   if (r.halted) {
     lines.push(`Stopped early at ${clock(r.halted.t)} on slice ${r.halted.slice} (${r.halted.status}): ${r.halted.message}.`, '');
+  }
+  if (r.walletCap) {
+    const c = r.walletCap;
+    lines.push(
+      c.perSwap == null
+        ? `Wallet cap (policy revision ${c.revision}): none; the wallet would have accepted the whole order as one swap.`
+        : `Wallet cap (policy revision ${c.revision}): the wallet refuses any swap above ${amount(c.perSwap, 2)} ${r.sell.symbol}` +
+            `${c.perDay != null ? ` and sales above ${amount(c.perDay, 2)} ${r.sell.symbol} a day` : ''}; ` +
+            `this run's largest slice was ${amount(c.largestSlice, 2)} ${r.sell.symbol}.`,
+      '',
+    );
   }
   lines.push(
     '| Cost in bps of the input | bps |',

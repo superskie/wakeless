@@ -135,13 +135,20 @@ export function normalizeQuote(res, { sellDecimals, buyDecimals, amountIn }) {
     };
   }
   const message = res?.json?.message ?? `HTTP ${res?.status}`;
+  const code = res?.json?.code ?? null;
   return {
     ok: false,
     status: res?.status ?? 0,
     message,
+    code,
     // 1Click says "No liquidity available"; the Agent API says
     // "No route or liquidity is available" with code route_unavailable.
-    noLiquidity: /no liquidity|no route/i.test(message) || res?.json?.code === 'route_unavailable',
+    noLiquidity: /no liquidity|no route/i.test(message) || code === 'route_unavailable',
+    // The owner froze, archived or deleted the agent: no later slot will quote.
+    refused: STOP_CODES.has(code),
     latencyMs: res?.latencyMs ?? null,
   };
 }
+
+/** Agent API refusals that waiting does not fix. They stop the order instead of deferring it. */
+export const STOP_CODES = new Set(['wallet_frozen', 'agent_archived', 'agent_deleted']);

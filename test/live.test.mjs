@@ -192,6 +192,43 @@ test('a hard refusal from the API stops the desk instead of retrying', async () 
   assert.match(report.halted.message, /policy_action_denied/);
 });
 
+test('the owner freezing the wallet stops the desk at its next slice', async () => {
+  const fake = fakeAgentApi();
+  const swap = fake.bot.swap;
+  let previews = 0;
+  fake.bot.swap = async (agentId, req, opts) => {
+    // Probe, one-shot and two slices quote; then the owner freezes the wallet.
+    if (req.dry && ++previews > 4) {
+      throw Object.assign(new Error('The wallet is frozen.'), { status: 409, code: 'wallet_frozen' });
+    }
+    return swap(agentId, req, opts);
+  };
+  const { result, report, journal } = await run(fake, 'live');
+
+  assert.equal(result.halted, true);
+  assert.equal(previews, 5, 'no slice is quoted after the refusal');
+  assert.equal(fake.submits.length, 2);
+  assert.equal(report.slices.fills, 2);
+  assert.equal(report.halted.status, 'REFUSED');
+  assert.equal(journal.events.filter((e) => e.type === 'slice').at(-1).decision.reason, 'refused_wallet_frozen');
+  assert.match(renderReport(report), /Stopped early .*The wallet is frozen\. \(wallet_frozen\)/);
+});
+
+test('the report states the wallet cap journaled with the order', async () => {
+  const fake = fakeAgentApi();
+  const order = prepareOrder(spec, TOKENS);
+  const journal = memoryJournal();
+  const client = agentQuoteClient({ bot: fake.bot, agentId: 'agent-1', prices: fake.prices, clock: () => 0 });
+  const executor = agentExecutor({ api: fake.api, bot: fake.bot, agentId: 'agent-1', mode: 'preview', runId: 'run' });
+  const walletCap = { revision: 4, reason: 'capped', perSwap: '260000000', perDay: '1000000000', largestSlice: '231000000' };
+  await runOrder({ order, client, executor, clock: fakeClock(), journal, rand: mulberry32(7), seed: 7, walletCap });
+
+  const text = renderReport(buildReport(journal.events));
+  assert.match(text, /Wallet cap \(policy revision 4\): the wallet refuses any swap above 260\.00 USDC and sales above 1,000\.00 USDC a day; this run's largest slice was 231\.00 USDC\./);
+  // A run without a cap says nothing about one.
+  assert.doesNotMatch(renderReport((await run(fakeAgentApi(), 'preview')).report), /Wallet cap/);
+});
+
 test('a route the agent can not fill is split, like a 1Click no-liquidity answer', async () => {
   const fake = fakeAgentApi();
   const swap = fake.bot.swap;

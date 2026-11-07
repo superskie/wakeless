@@ -10,12 +10,26 @@
 //   node live/agent.mjs allow-withdraw <chain> <address>   owner signs: withdrawals only to this address
 //   node live/agent.mjs withdraw <asset> <amount> <chain> <address> [--execute]   preview, or withdraw
 //   node live/agent.mjs quote <from> <to> <amount> preview a swap (dry, no funds move)
+//   node live/agent.mjs cap <order.json>   owner signs: no swap above one slice of this order, no more than the order a day
+//   node live/agent.mjs prove-cap <order.json> [--out <file>]   ask the wallet for the whole order, one cap and one unit more (dry)
+//   node live/agent.mjs freeze | unfreeze  owner's kill switch: a frozen wallet refuses every swap, so a running desk stops
 //
 // Assets are full asset ids as listed by GET /v1/tokens (for example
 // nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near).
+import fs from 'node:fs';
 import { createGrantCredential, createIdempotencyKey } from '@near-intents-agent-api/sdk';
+import { prepareOrder } from '../src/order.mjs';
+import { fromUnits } from '../src/units.mjs';
 import { agentApi, appendEnv, createOwnerKey, loadOwner, readEnv, required, runOwnerIntent, show, waitForStatus, wakelessPolicy } from './lib.mjs';
 import { describeExit, exitAddressHistory } from './exit-check.mjs';
+import { priceBook } from './quote-client.mjs';
+import { capFor, withSliceCap } from './cap.mjs';
+
+/** Read an order file against the Agent API's token list. */
+async function loadOrder(api, file) {
+  if (!file) throw new Error('usage: <command> <order.json>');
+  return prepareOrder(JSON.parse(fs.readFileSync(file, 'utf8')), await priceBook(api).tokens());
+}
 
 const [command, ...args] = process.argv.slice(2);
 
@@ -172,10 +186,120 @@ async function main() {
       show(preview);
       return;
     }
+    case 'cap': {
+      // The owner signs the order's slice size into the wallet's policy. The
+      // Agent API then refuses, for every grant, a swap of this asset above
+      // the largest slice any seed of this order can draw, and sales beyond
+      // the order within a rolling day. The desk can not lift either rule.
+      const api = agentApi(env);
+      const { account } = loadOwner(env);
+      const agentId = required(env, 'WAKELESS_AGENT_ID');
+      const order = await loadOrder(api, args[0]);
+      const cap = capFor(order);
+      const current = await api.getPolicy(agentId);
+      if (!current.policy || current.revision == null) throw new Error('the agent has no applied policy yet');
+      const policy = withSliceCap(current.policy, cap);
+      const units = (v) => `${fromUnits(v, order.sell.decimals)} ${order.sell.symbol}`;
+      console.log(
+        `Policy revision ${current.revision} -> new revision. ${order.sell.symbol} (${order.sell.blockchain}): no swap above ${units(cap.perSwap)} ` +
+          `(the largest slice ${order.slices} slices of ${units(order.totalUnits)} can draw), at most ${units(cap.perDay)} a day.`,
+      );
+      const status = await runOwnerIntent(api, account, { type: 'policy_update', agent_id: agentId, expected_revision: current.revision, policy });
+      if (status.status !== 'SUCCESS') throw new Error(`policy_update ended ${status.status}: ${status.failure_code ?? 'no failure code'}`);
+      const after = await api.getPolicy(agentId);
+      show({
+        revision: after.revision,
+        status: after.status,
+        provider_policy_synced: after.provider_policy_synced,
+        transaction_hash: after.transaction_hash,
+        limits: after.policy.limits,
+      });
+      return;
+    }
+    case 'prove-cap': {
+      // Ask the wallet, dry, for the whole order as one swap, for exactly the
+      // cap, and for one unit more. Nothing is submitted and no funds move.
+      const api = agentApi(env);
+      const agentId = required(env, 'WAKELESS_AGENT_ID');
+      const bot = api.forGrant(required(env, 'WAKELESS_GRANT_TOKEN', 'run: node live/agent.mjs grant'));
+      const out = args.includes('--out') ? args[args.indexOf('--out') + 1] : null;
+      const [file] = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--out');
+      const order = await loadOrder(api, file);
+      const [agent, view] = await Promise.all([api.getAgent(agentId), api.getPolicy(agentId)]);
+      const raw = view.policy?.limits?.per_transaction?.[order.sell.assetId];
+      if (raw == null) throw new Error(`the policy has no per-swap cap for ${order.sell.assetId}; run: node live/agent.mjs cap <order.json>`);
+      const perSwap = BigInt(raw);
+      const asks = [
+        { label: 'whole order as one swap', amount: order.totalUnits },
+        { label: 'exactly the cap', amount: perSwap },
+        { label: 'one unit above the cap', amount: perSwap + 1n },
+      ];
+      const swaps = [];
+      for (const ask of asks) {
+        const preview = await bot.swap(agentId, {
+          origin_asset: order.sell.assetId,
+          destination_asset: order.buy.assetId,
+          amount: ask.amount.toString(),
+          confidential: true,
+          dry: true,
+        });
+        swaps.push({
+          label: ask.label,
+          amount: ask.amount.toString(),
+          amountHuman: fromUnits(ask.amount, order.sell.decimals),
+          warnings: (preview.warnings ?? []).map((w) => w.code),
+        });
+      }
+      for (const s of swaps) {
+        console.log(`${s.label.padEnd(24)} ${`${s.amountHuman} ${order.sell.symbol}`.padStart(24)}  warnings: ${s.warnings.join(', ') || 'none'}`);
+      }
+      const evidence = {
+        checkedAt: new Date().toISOString(),
+        api: env.NEAR_INTENTS_AGENT_API_URL || 'https://api.agentsonintents.com',
+        wallet: agent.wallet.near_account_id,
+        policy: {
+          revision: view.revision,
+          status: view.status,
+          appliedAt: view.applied_at,
+          providerPolicySynced: view.provider_policy_synced,
+          transactionHash: view.transaction_hash,
+          limits: view.policy.limits,
+        },
+        order: { id: order.id, sell: order.sell.ref, buy: order.buy.ref, amount: order.amount, slices: order.slices, sizeJitter: order.sizeJitter },
+        swaps,
+      };
+      if (out) {
+        fs.writeFileSync(out, JSON.stringify(evidence, null, 2) + '\n');
+        console.log(`Written: ${out}`);
+      }
+      return;
+    }
+    case 'freeze':
+    case 'unfreeze': {
+      // The owner's kill switch. A frozen wallet gets no swap, quote or
+      // withdrawal from the Agent API, so a running desk stops at its next
+      // slice without any help from the desk. Freezing skips the policy
+      // cooldown; unfreezing has its own 10 minute one.
+      const api = agentApi(env);
+      const { account } = loadOwner(env);
+      const agentId = required(env, 'WAKELESS_AGENT_ID');
+      const status = await runOwnerIntent(api, account, { type: command === 'freeze' ? 'agent_freeze' : 'agent_unfreeze', agent_id: agentId });
+      if (status.status !== 'SUCCESS') throw new Error(`${command} ended ${status.status}: ${status.failure_code ?? 'no failure code'}`);
+      const [agent, view] = await Promise.all([api.getAgent(agentId), api.getPolicy(agentId)]);
+      show({
+        agent_status: agent.status,
+        frozen: view.policy?.frozen ?? null,
+        revision: view.revision,
+        transaction_hash: view.transaction_hash,
+        cooldowns: agent.cooldowns,
+      });
+      return;
+    }
     default:
       console.log(
         'commands: owner | create | grant | status | deposit <asset> [amount] | shield <asset> <amount> | ' +
-          'allow-withdraw <chain> <address> | withdraw <asset> <amount> <chain> <address> [--execute] | quote <from> <to> <amount>',
+          'allow-withdraw <chain> <address> | withdraw <asset> <amount> <chain> <address> [--execute] | quote <from> <to> <amount> | ' +
+          'cap <order.json> | prove-cap <order.json> [--out <file>] | freeze | unfreeze',
       );
   }
 }

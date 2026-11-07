@@ -31,6 +31,12 @@ test('other failed quotes wait, then skip', () => {
   assert.equal(decide({ ...ctx, timeLeft: false, quote: q }).reason, 'quote_failed_exhausted');
 });
 
+test('a refusal that waiting can not fix stops the order, even with time left', () => {
+  const q = { ok: false, noLiquidity: false, refused: true, code: 'wallet_frozen', message: 'The wallet is frozen.' };
+  assert.deepEqual(decide({ ...ctx, quote: q }), { action: Action.STOP, reason: 'refused_wallet_frozen' });
+  assert.equal(decide({ ...ctx, quote: { ...q, noLiquidity: true } }).action, Action.STOP);
+});
+
 test('floor is the arrival rate minus the accepted adverse move', () => {
   assert.equal(floorFrom(100, 50), 99.5);
   assert.equal(floorFrom(0.0104, 0), 0.0104);

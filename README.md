@@ -51,6 +51,10 @@ address, which tells observers how much is still coming.
    in two.
 4. Writes every decision with the raw quote to a JSONL journal and builds the
    execution report from that journal alone.
+5. In live mode the wallet holds the order to its slices: the owner signs a
+   per-swap cap into the agent's policy, so the whole order as one swap is
+   refused whatever the desk sends, and the owner can freeze the wallet to
+   stop a running order.
 
 ## Try it
 
@@ -165,6 +169,9 @@ only numbers taken at the same moment are compared.
   The desk sends every swap in confidential form. In the live run below, four
   slices settled while the public `intents.near` ledger showed a zero balance
   for the agent.
+- The slice size is a rule of the wallet, not only of the desk: the owner
+  signs a per-swap cap into the same policy
+  ([The wallet enforces the slicing](#the-wallet-enforces-the-slicing)).
 
 ## Live mode
 
@@ -219,7 +226,9 @@ Built and checked on the hackathon demo deployment
 To reproduce, you need a demo partner key from
 `https://partners.demo.agentsonintents.com/dashboard`. Put it in `.env` as
 `NEAR_INTENTS_AGENT_API_KEY`, with
-`NEAR_INTENTS_AGENT_API_URL=https://api.demo.agentsonintents.com`, then:
+`NEAR_INTENTS_AGENT_API_URL=https://api.demo.agentsonintents.com`. Keys made
+before the partner portal (`naa_...`) are refused with `api_key_retired`, and
+`live/` uses SDK 0.8.0, which takes the portal's keys. Then:
 
 ```sh
 cd live && npm install && cd ..
@@ -261,10 +270,80 @@ from 0.25% on the first slice to 0.10% on the last two minutes later, so it
 reads as the all-in cost against the API's USD prices rather than a fixed fee.
 
 Live: `node live/run.mjs <order.json> --live --confirm`. It refuses to start
-unless the agent's confidential balance covers the order. To fund it,
+unless the agent's confidential balance covers the order and the wallet's
+policy caps the swap size at one slice (next section). To fund it,
 `node live/agent.mjs deposit <asset> <amount>` asks for a deposit address with
 `confidential: true`, and `node live/agent.mjs shield <asset> <amount>` moves a
 public balance over.
+
+### The wallet enforces the slicing
+
+Slicing is only a promise of the desk's code until the wallet that holds the
+funds refuses to break it. The owner signs the slice size into the agent's
+policy:
+
+```sh
+node live/agent.mjs cap examples/live-eth-base-to-sol.json
+```
+
+It sets two of the policy's per-asset limits for the asset the order sells:
+`per_transaction`, the largest slice any seed of this order can draw (one slice
+with the largest random size and all others with the smallest, plus the
+rounding remainder), and `daily`, the order itself. The Agent API checks both
+on every swap of every grant before anything reaches the provider. The desk
+can not lift them and neither can a leaked grant: the whole order as one swap
+is refused, and so is selling more than the order within a rolling day.
+`live/run.mjs --live` refuses to start unless the policy lets every slice of
+the run through and refuses the whole order; each report states the cap.
+
+**Do** `node live/agent.mjs prove-cap examples/live-eth-base-to-sol.json`.
+**See** three dry swaps through the desk's grant: the whole order, exactly the
+cap, and one base unit more. On 7 November 2026, policy revision 4
+([examples/wallet-cap.json](examples/wallet-cap.json)):
+
+| Swap asked for | ETH | Warnings |
+| --- | ---: | --- |
+| The whole order as one swap | 0.0025 | `policy_transaction_limit_exceeded`, `insufficient_balance` |
+| Exactly the cap | 0.00095588235294118 | `insufficient_balance` |
+| One wei above the cap | 0.000955882352941181 | `policy_transaction_limit_exceeded`, `insufficient_balance` |
+
+A dry swap lists as warnings the refusals the live request would get.
+`insufficient_balance` is there because the agent was empty after the round
+trip below. With 4 slices and 30% size jitter the cap is 38% of the order; for
+the 16-slice $500,000 order above it would be 11%.
+
+The policy change is a NEAR transaction
+([`Dw4oWNU...`](https://nearblocks.io/txns/Dw4oWNUvgJFmbjC9GGPECvhQT1nF4L2JJRahNt634aqe),
+block 223,465,984) whose arguments carry the policy encrypted, next to a hash
+of it; the cap does not appear in it in plain text. The time of the change is
+public, though, so a cap signed right before an order says an order may be
+coming. Sign it well ahead, or keep one standing cap for orders of that size.
+
+### Kill switch
+
+```sh
+node live/agent.mjs freeze     # the owner signs agent_freeze
+node live/agent.mjs unfreeze   # the owner signs agent_unfreeze
+```
+
+A frozen wallet gets no swap, quote or withdrawal from the Agent API, so
+stopping a running order needs nothing from the desk. The desk reads that
+answer (`wallet_frozen`, or `agent_archived` and `agent_deleted`) as final: it
+stops the order at that slice instead of waiting for a later slot, and the
+report says why. A freeze skips the API's cooldown between policy changes.
+
+**Do** start `node live/run.mjs examples/live-eth-base-to-sol.json --speed 3`
+and run `node live/agent.mjs freeze` from a second terminal.
+**See** the desk stop at its next slice. On 7 November 2026 the preview run
+started at 12:26:29 UTC and the freeze applied at 12:27:01 (policy revision 5,
+[`AcZmj7A...`](https://nearblocks.io/txns/AcZmj7Af45URVgHDsaLG6rbdL2HcSNm8BiywKhjWSkbJ)).
+Slice 1, requested before that, was the last one priced. Slice 2, at 12:27:41,
+got "The owner froze this agent. Only an agent_unfreeze intent resumes
+executions." and the desk stopped:
+[examples/freeze-run.md](examples/freeze-run.md), journal
+`examples/freeze-run.jsonl`, owner actions in
+[examples/freeze-run-chain.json](examples/freeze-run-chain.json). The owner
+unfroze the wallet at 12:28:10 (revision 6).
 
 ### The live run, 5 November 2026
 
@@ -324,13 +403,14 @@ the deposit address, and later the way out to the owner's wallet.
 | `src/oneclick.mjs` | 1Click client with retries, quote parsing |
 | `src/report.mjs` | Cost report rebuilt from a journal |
 | `src/precheck.mjs` | Pre-trade check: size penalty by slice count, advice |
-| `live/agent.mjs` | Agent lifecycle on the Agent API: owner, agent, grant, deposit, withdrawal rule, withdraw |
+| `live/agent.mjs` | Agent lifecycle on the Agent API: owner, agent, grant, deposit, withdrawal rule, withdraw, slice cap, freeze |
+| `live/cap.mjs` | The slice cap an order needs, and whether the signed policy holds a run to it |
 | `live/run.mjs` | Works an order through the agent, preview or live |
 | `live/executor.mjs` | Submits a slice as a confidential swap with the floor as minimum output |
 | `live/quote-client.mjs` | The agent's swap preview as the price source |
 | `live/public-view.mjs` | The agent's public `intents.near` balances, next to its confidential ones |
 | `live/exit-check.mjs` | What a withdrawal address would link the order to, read from a public RPC |
-| `examples/` | Example orders, a committed dry run, an agent preview run and the live run |
+| `examples/` | Example orders, committed dry runs, an agent preview run, the live run, the cap check and the frozen run |
 | `research/impact/` | Raw price impact snapshots |
 
 ## Related work

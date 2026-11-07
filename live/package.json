@@ -9,7 +9,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@near-intents-agent-api/sdk": "^0.7.3",
+    "@near-intents-agent-api/sdk": "0.8.0",
     "viem": "^2.56.8"
   }
 }

@@ -1,0 +1,56 @@
+{
+  "checkedAt": "2026-11-07T12:25:54.209Z",
+  "api": "https://api.demo.agentsonintents.com",
+  "wallet": "0d54a875b32c4ad1668c3e86e807ab28905133c93e1daae19653decaedea079f",
+  "policy": {
+    "revision": 4,
+    "status": "APPLIED",
+    "appliedAt": "2026-11-07T12:25:22.022Z",
+    "providerPolicySynced": true,
+    "transactionHash": "Dw4oWNUvgJFmbjC9GGPECvhQT1nF4L2JJRahNt634aqe",
+    "limits": {
+      "per_transaction": {
+        "nep141:base.omft.near": "955882352941180"
+      },
+      "daily": {
+        "nep141:base.omft.near": "2500000000000000"
+      }
+    }
+  },
+  "order": {
+    "id": "live-eth-base-sol",
+    "sell": "eth:base",
+    "buy": "sol:sol",
+    "amount": "0.0025",
+    "slices": 4,
+    "sizeJitter": 0.3
+  },
+  "swaps": [
+    {
+      "label": "whole order as one swap",
+      "amount": "2500000000000000",
+      "amountHuman": "0.0025",
+      "warnings": [
+        "policy_transaction_limit_exceeded",
+        "insufficient_balance"
+      ]
+    },
+    {
+      "label": "exactly the cap",
+      "amount": "955882352941180",
+      "amountHuman": "0.00095588235294118",
+      "warnings": [
+        "insufficient_balance"
+      ]
+    },
+    {
+      "label": "one unit above the cap",
+      "amount": "955882352941181",
+      "amountHuman": "0.000955882352941181",
+      "warnings": [
+        "policy_transaction_limit_exceeded",
+        "insufficient_balance"
+      ]
+    }
+  ]
+}

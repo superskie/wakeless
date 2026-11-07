@@ -1,0 +1,28 @@
+{
+  "note": "Owner actions around examples/freeze-run.jsonl, a preview run on 7 November 2026. Revisions and applied times from GET /v1/agents/{agent_id}/policy/history on the demo Agent API; blocks and block times from nearblocks.io. Each NEAR transaction carries the new policy encrypted, next to a hash of it.",
+  "agent": {
+    "nearAccount": "0d54a875b32c4ad1668c3e86e807ab28905133c93e1daae19653decaedea079f",
+    "ownerNearAccount": "0sf51379f085faa66c62bca73e3a96d0bd855af1ed"
+  },
+  "cap": {
+    "revision": 4,
+    "appliedAt": "2026-11-07T12:25:22.022Z",
+    "nearTx": "Dw4oWNUvgJFmbjC9GGPECvhQT1nF4L2JJRahNt634aqe",
+    "block": 223465984,
+    "blockTime": "2026-11-07T12:25:17.566Z"
+  },
+  "freeze": {
+    "revision": 5,
+    "appliedAt": "2026-11-07T12:27:01.149Z",
+    "nearTx": "AcZmj7Af45URVgHDsaLG6rbdL2HcSNm8BiywKhjWSkbJ",
+    "block": 223466161,
+    "blockTime": "2026-11-07T12:26:56.565Z"
+  },
+  "unfreeze": {
+    "revision": 6,
+    "appliedAt": "2026-11-07T12:28:10.035Z",
+    "nearTx": "2cJoZ5Mx1zqnAysAck2DaRHvM87gzQhkbcsgdWcbTDSw",
+    "block": 223466280,
+    "blockTime": "2026-11-07T12:28:05.231Z"
+  }
+}

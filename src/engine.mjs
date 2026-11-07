@@ -9,6 +9,22 @@ function medianAmount(schedule) {
   return sorted[Math.floor(sorted.length / 2)];
 }
 
+/**
+ * The order's slice schedule. `runOrder` draws it first from `rand`, so the
+ * same seed gives the same schedule here and in the run.
+ */
+export function scheduleFor(order, rand) {
+  return buildSchedule({
+    total: order.totalUnits,
+    slices: order.slices,
+    horizonMs: order.horizonMs,
+    timeJitter: order.timeJitter,
+    sizeJitter: order.sizeJitter,
+    minSlice: order.minSliceUnits,
+    rand,
+  });
+}
+
 /** What the journal keeps of a quote: the exact request, the raw response and the numbers used. */
 function snapshot({ body, res, q }) {
   return { request: body, status: res.status, latencyMs: res.latencyMs, response: res.json, q };
@@ -39,26 +55,19 @@ function realizedCostBps(q, amountOut) {
  * @param {{ write: Function }} p.journal
  * @param {() => number} p.rand
  * @param {number} [p.seed] recorded so the schedule can be replayed
+ * @param {object} [p.walletCap] the wallet's own slice cap, recorded with the order (live modes)
  * @param {(event: object) => void} [p.onEvent]
  */
-export async function runOrder({ order, client, executor, clock, journal, rand, seed = null, onEvent = () => {} }) {
+export async function runOrder({ order, client, executor, clock, journal, rand, seed = null, walletCap = null, onEvent = () => {} }) {
   const { sell, buy } = order;
-  const schedule = buildSchedule({
-    total: order.totalUnits,
-    slices: order.slices,
-    horizonMs: order.horizonMs,
-    timeJitter: order.timeJitter,
-    sizeJitter: order.sizeJitter,
-    minSlice: order.minSliceUnits,
-    rand,
-  });
+  const schedule = scheduleFor(order, rand);
   const emit = (type, data) => {
     const event = journal.write(type, { t: Math.round(clock.now()), ...data });
     onEvent(event);
     return event;
   };
 
-  emit('order', { mode: executor.mode, seed, order, schedule });
+  emit('order', { mode: executor.mode, seed, order, schedule, ...(walletCap ? { walletCap } : {}) });
 
   const quoteFor = async (amount) => {
     const body = intentsQuoteBody({
@@ -144,6 +153,9 @@ export async function runOrder({ order, client, executor, clock, journal, rand, 
           emit('skip', { sliceId: slice.id, amount: slice.amount, reason: `not_filled_${String(fill.status).toLowerCase()}` });
         }
       }
+    } else if (decision.action === Action.STOP) {
+      emit('halt', { sliceId: slice.id, status: 'REFUSED', message: `${quote.q.message} (${quote.q.code})` });
+      return { aborted: false, halted: true };
     } else if (decision.action === Action.DEFER) {
       queue.push({ ...slice, atMs: retryAt, defers: slice.defers + 1 });
     } else if (decision.action === Action.SPLIT) {

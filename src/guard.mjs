@@ -5,6 +5,7 @@ export const Action = Object.freeze({
   DEFER: 'defer',
   SPLIT: 'split',
   SKIP: 'skip',
+  STOP: 'stop',
 });
 
 /**
@@ -14,12 +15,14 @@ export const Action = Object.freeze({
  * - A quote below the floor waits for a later slot, up to `maxDefers` times.
  * - "No liquidity" splits the slice in two while both halves stay above
  *   `minSlice`, because smaller sizes usually clear when large ones cannot.
+ * - A refusal that waiting can not fix (the owner froze the wallet) stops the
+ *   whole order at once.
  * - Any other failed quote waits like a bad price does.
  * - When retries or time run out, the slice is skipped and reported as unfilled.
  *   The desk never lowers the floor to finish an order.
  *
  * @param {object} p
- * @param {{ ok: boolean, rate?: number, noLiquidity?: boolean, message?: string }} p.quote
+ * @param {{ ok: boolean, rate?: number, noLiquidity?: boolean, refused?: boolean, code?: string, message?: string }} p.quote
  * @param {number} p.floorRate minimum acceptable output per unit of input
  * @param {bigint} p.amount slice size in base units
  * @param {bigint} p.minSlice smallest slice allowed
@@ -32,6 +35,7 @@ export function decide({ quote, floorRate, amount, minSlice, defers, maxDefers, 
   const canWait = defers < maxDefers && timeLeft;
 
   if (!quote.ok) {
+    if (quote.refused) return { action: Action.STOP, reason: `refused_${quote.code}` };
     if (quote.noLiquidity && amount / 2n >= minSlice) {
       return { action: Action.SPLIT, reason: 'no_liquidity_split' };
     }

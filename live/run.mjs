@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomInt } from 'node:crypto';
 import { prepareOrder } from '../src/order.mjs';
-import { runOrder } from '../src/engine.mjs';
+import { runOrder, scheduleFor } from '../src/engine.mjs';
 import { realClock } from '../src/clock.mjs';
 import { fileJournal, readJournal } from '../src/journal.mjs';
 import { buildReport, renderReport } from '../src/report.mjs';
@@ -14,6 +14,7 @@ import { describeEvent } from '../src/describe.mjs';
 import { agentApi, readEnv, required, ROOT } from './lib.mjs';
 import { agentQuoteClient, priceBook } from './quote-client.mjs';
 import { agentExecutor } from './executor.mjs';
+import { checkSliceCap } from './cap.mjs';
 
 const USAGE = `Usage:
   node live/run.mjs <order.json> [--speed <n>] [--seed <n>] [--journal <file>]
@@ -23,6 +24,8 @@ const USAGE = `Usage:
   node live/run.mjs <order.json> --live --confirm [--speed <n>] [--seed <n>]
       Live. Each slice that clears the floor is submitted as a confidential
       swap whose minimum output is the floor. Spends the agent's balance.
+      Runs only when the wallet's policy caps the swap size at one slice
+      (node live/agent.mjs cap <order.json>).
 
 Needs NEAR_INTENTS_AGENT_API_KEY, WAKELESS_AGENT_ID and WAKELESS_GRANT_TOKEN
 in .env (node live/agent.mjs owner, create, grant).`;
@@ -76,6 +79,29 @@ async function main() {
     `Agent ${agentId.slice(0, 8)}... policy revision ${policyView.revision}: actions ${policy.actions.join(', ')}, ` +
       `confidential ${policy.confidential ? 'allowed' : 'not allowed'}, budget $${policy.budget?.daily_usd ?? '-'} a day.`,
   );
+
+  const speed = args.speed ? Number(args.speed) : 1;
+  const seed = args.seed !== undefined ? Number(args.seed) : randomInt(2 ** 31);
+  // The same seed draws the same schedule inside runOrder.
+  const schedule = scheduleFor(order, mulberry32(seed));
+  const cap = checkSliceCap(policy, { assetId: order.sell.assetId, schedule, total: order.totalUnits });
+  const sym = order.sell.symbol;
+  const units = (v) => `${fromUnits(v, order.sell.decimals)} ${sym}`;
+  const capLine = {
+    capped: `Wallet cap: no swap above ${units(cap.perSwap ?? 0n)}${cap.perDay != null ? `, at most ${units(cap.perDay)} a day` : ''}; this run's largest slice is ${units(cap.largest)}.`,
+    no_cap: `Wallet cap: none. The wallet would accept all ${order.amount} ${sym} as one swap.`,
+    cap_allows_whole_order: `Wallet cap: ${units(cap.perSwap ?? 0n)} per swap, which lets the whole order through as one swap.`,
+    cap_below_slice: `Wallet cap: ${units(cap.perSwap ?? 0n)} per swap, below this run's largest slice of ${units(cap.largest)}.`,
+    daily_below_order: `Wallet cap: at most ${units(cap.perDay ?? 0n)} a day, less than the order.`,
+  }[cap.reason];
+  console.log(capLine);
+  if (live && !cap.ok) {
+    throw new Error(
+      `the desk trades live only from a wallet that refuses any swap larger than one slice; ` +
+        `have the owner sign the cap first: node live/agent.mjs cap ${file}`,
+    );
+  }
+
   if (live) {
     const { balances } = await api.getBalances(agentId, { source: 'confidential' });
     const entry = balances.find((b) => b.asset_id === order.sell.assetId);
@@ -91,8 +117,6 @@ async function main() {
     console.log('Preview: quotes come from the agent; nothing is submitted and no funds move.');
   }
 
-  const speed = args.speed ? Number(args.speed) : 1;
-  const seed = args.seed !== undefined ? Number(args.seed) : randomInt(2 ** 31);
   const mode = live ? 'live' : 'preview';
   const journalFile = args.journal ?? path.join(ROOT, 'journals', `${order.id}_${mode}_${stamp()}.jsonl`);
 
@@ -104,6 +128,13 @@ async function main() {
     journal: fileJournal(journalFile),
     rand: mulberry32(seed),
     seed,
+    walletCap: {
+      revision: policyView.revision,
+      reason: cap.reason,
+      perSwap: cap.perSwap?.toString() ?? null,
+      perDay: cap.perDay?.toString() ?? null,
+      largestSlice: cap.largest.toString(),
+    },
     onEvent: (event) => {
       const line = describeEvent(event, order, speed);
       if (line) console.log(line);

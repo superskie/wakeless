@@ -50,3 +50,27 @@ export function buildSchedule({ total, slices, horizonMs, timeJitter = 0, sizeJi
 
   return amounts.map((amount, index) => ({ index, atMs: times[index], amount }));
 }
+
+/**
+ * The most any one slice of `buildSchedule` can be, for every seed: one slice
+ * draws the largest weight and all others the smallest, plus the remainder of
+ * at most `slices` units that goes to the last slice. A larger minimum slice
+ * only lowers this bound, so it holds for any `minSlice`, whatever price
+ * converted `minSliceUsd` into units. Splits and deferrals never make a slice
+ * larger, so no swap of the order can exceed it.
+ *
+ * @param {object} p
+ * @param {bigint} p.total total input in base units
+ * @param {number} p.slices number of slices
+ * @param {number} [p.sizeJitter] 0..1, as passed to buildSchedule
+ * @returns {bigint}
+ */
+export function largestPossibleSlice({ total, slices, sizeJitter = 0 }) {
+  if (typeof total !== 'bigint' || total <= 0n) throw new Error('total must be a positive bigint');
+  if (!Number.isInteger(slices) || slices < 1) throw new Error('slices must be an integer >= 1');
+  if (!(sizeJitter >= 0 && sizeJitter <= 1)) throw new Error('sizeJitter must be between 0 and 1');
+  const most = BigInt(Math.round((1 + sizeJitter) * WEIGHT_SCALE));
+  const least = BigInt(Math.round((1 - sizeJitter) * WEIGHT_SCALE));
+  const n = BigInt(slices);
+  return (total * most) / (most + (n - 1n) * least) + n;
+}

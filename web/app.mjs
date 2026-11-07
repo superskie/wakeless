@@ -22,7 +22,11 @@ const SAMPLE_RUNS = {
 };
 const LIVE_RUN = '../examples/live-run.jsonl';
 const LIVE_CHAIN = '../examples/live-run-chain.json';
+const WALLET_CAP = '../examples/wallet-cap.json';
+const FREEZE_RUN = '../examples/freeze-run.jsonl';
+const FREEZE_CHAIN = '../examples/freeze-run-chain.json';
 const BASESCAN_TX = 'https://basescan.org/tx/';
+const NEARBLOCKS_TX = 'https://nearblocks.io/txns/';
 const PRIVACY_SNAPSHOT = '../research/confidential/usdc-arb_sol-sol_2026-11-05t03-37-19-519z.json';
 const IMPACT_SIZES = [1_000, 10_000, 50_000, 100_000, 250_000, 500_000, 1_000_000];
 const ASSETS = ['usdc:arb', 'usdc:eth', 'usdc:base', 'usdc:sol', 'usdt:eth', 'usdt:tron', 'eth:eth', 'eth:arb', 'eth:base', 'sol:sol', 'btc:btc', 'wnear:near', 'zec:zec'];
@@ -890,6 +894,80 @@ async function loadLiveRun() {
   }
 }
 
+// ---------- rules the wallet enforces: the slice cap and the owner's freeze ----------
+
+const utcs = (iso) => new Date(iso).toISOString().slice(11, 19);
+const nearLink = (hash) => html('a', { href: `${NEARBLOCKS_TX}${hash}`, target: '_blank', rel: 'noopener', text: 'NEAR tx' });
+const CAP_LABELS = {
+  'whole order as one swap': 'The whole order, one swap',
+  'exactly the cap': 'Exactly the cap',
+  'one unit above the cap': 'One wei above the cap',
+};
+
+/** The committed cap check (dry swaps through the desk's grant) and the preview run the owner froze. */
+async function loadWalletRules() {
+  try {
+    const responses = await Promise.all([fetch(WALLET_CAP), fetch(FREEZE_RUN), fetch(FREEZE_CHAIN)]);
+    const failed = responses.find((res) => !res.ok);
+    if (failed) throw new Error(`HTTP ${failed.status}`);
+    const [cap, events, chain] = [await responses[0].json(), parseJsonl(await responses[1].text()), await responses[2].json()];
+
+    const tbody = document.querySelector('#cap-table tbody');
+    tbody.textContent = '';
+    for (const s of cap.swaps) {
+      const refused = s.warnings.includes('policy_transaction_limit_exceeded');
+      tbody.append(
+        html('tr', {}, [
+          html('td', {}, [CAP_LABELS[s.label] ?? s.label, html('span', { class: 'amt', text: `${s.amountHuman} ETH` })]),
+          html('td', { class: refused ? 'miss' : 'good', text: refused ? 'refused' : 'allowed' }),
+        ]),
+      );
+    }
+    const whole = cap.swaps[0];
+    const perSwap = cap.swaps[1];
+    const share = (Number(perSwap.amount) / Number(whole.amount)) * 100;
+    const capNote = $('#cap-note');
+    capNote.textContent = '';
+    capNote.append(
+      `The owner signed it into the agent's policy (revision ${cap.policy.revision}, `,
+      nearLink(cap.policy.transactionHash),
+      `): no swap above ${perSwap.amountHuman} ETH, the largest slice any schedule of this ${cap.order.slices}-slice order can draw ` +
+        `(${num(share, 0)}% of it), and no more than the order a day. The Agent API checks it on every swap of every grant. ` +
+        'Asked dry through the desk\'s own grant on 7 Nov; every answer also warned insufficient_balance, as the agent was empty. ' +
+        'The NEAR transaction carries the policy encrypted: the cap is not in it in plain text.',
+    );
+
+    const order = events.find((e) => e.type === 'order');
+    const halt = events.find((e) => e.type === 'halt');
+    const stopped = events.find((e) => e.type === 'slice' && e.decision.action === 'stop');
+    const ledger = $('#freeze-ledger');
+    ledger.textContent = '';
+    ledger.append(
+      html('li', {}, [
+        html('span', { class: 't', text: utcs(order.wall) }),
+        html('span', { text: `A preview run starts: ${order.order.amount} ETH (Base) to SOL in ${order.order.slices} slices.` }),
+      ]),
+      html('li', {}, [
+        html('span', { class: 't', text: utcs(chain.freeze.appliedAt) }),
+        html('span', {}, [
+          'The owner freezes the wallet ',
+          html('span', { class: 'pub' }, [`policy revision ${chain.freeze.revision}, `, nearLink(chain.freeze.nearTx)]),
+        ]),
+      ]),
+      html('li', {}, [
+        html('span', { class: 't', text: utcs(halt.wall) }),
+        html('span', { text: `Slice ${stopped.slice.id} asks for its quote. The API answers ${stopped.quote.q.code} and the desk stops.` }),
+      ]),
+    );
+    $('#freeze-note').textContent =
+      'A frozen wallet gets no swap, quote or withdrawal from the Agent API, so stopping needs nothing from the desk. ' +
+      `The desk reads that answer as final and does not wait for a later slot. Slice 1, requested before the freeze applied, was the last one priced. ` +
+      `The owner unfroze the wallet at ${utcs(chain.unfreeze.appliedAt)} (revision ${chain.unfreeze.revision}).`;
+  } catch (err) {
+    $('#cap-note').textContent = `Wallet rules unavailable: ${err.message}`;
+  }
+}
+
 // ---------- committed replays: what each one got, shown before it is played ----------
 
 async function loadReplayStats() {
@@ -969,6 +1047,7 @@ async function init() {
   startMotion();
   loadPrivacySnapshot();
   loadLiveRun();
+  loadWalletRules();
   loadReplayStats();
   const res = await client.tokens();
   if (!res.ok || !Array.isArray(res.json)) {
