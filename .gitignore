@@ -7,3 +7,4 @@ site/
 *.log
 .DS_Store
 CLAUDE.md
+.wrangler/
