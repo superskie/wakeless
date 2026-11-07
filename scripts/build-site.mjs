@@ -70,6 +70,9 @@ for (const file of files) bytes += copy(file);
 // The landing page is the root. It links everything by absolute path, so the
 // same file works as /index.html here and as /web/home.html in the repo.
 fs.copyFileSync(path.join(webDir, 'home.html'), path.join(OUT, 'index.html'));
+// With a 404.html at the root, Pages answers unknown paths with it and a 404
+// status instead of serving the landing page for every path.
+fs.copyFileSync(path.join(webDir, '404.html'), path.join(OUT, '404.html'));
 // Cloudflare Pages reads _redirects: one address for the landing page, which
 // Pages would otherwise also serve as /web/home.
 fs.writeFileSync(path.join(OUT, '_redirects'), '/web/home.html / 301\n/web/home / 301\n');

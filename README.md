@@ -115,14 +115,11 @@ size penalty the slices avoid, so it follows the day's liquidity, and
 penalty from the committed quotes, the public leak next to the mainnet run,
 the desk's own scheduler to play with, the signed policy and its checks, and
 every claim with the command or transaction that checks it. **Do** open the
-desk at `/web/`. **See** the web desk: a live price-impact chart
-for the order size, a ticket that works an order as a dry run in the browser
-against live 1Click quotes (no wallet, no key) after an optional pre-trade
-check, a preview of the ticket's plan (one possible schedule, drawn by the
-same function the run uses, under the largest slice any draw can reach),
-replays of the two committed $500,000 runs, what a public TWAP and Wakeless
-each leave on the chain, the mainnet run below with links to its Base
-transactions, and the wallet's cap and freeze checks.
+desk at `/web/`. **See** the app only, no explanation: a ticket that works an
+order as a dry run in the browser against live 1Click quotes (no wallet, no
+key) after an optional pre-trade check, a preview of the ticket's plan (one
+possible schedule, drawn by the same function the run uses, under the largest
+slice any draw can reach), and replays of the two committed $500,000 runs.
 
 **Do** `node bin/wakeless.mjs check`. **See** whether a partner key is set and the
 HTTP status of a public and a confidential dry quote. Without a key the

@@ -1,7 +1,7 @@
 // Wakeless web desk. Runs the same engine as the command line, in the browser,
 // against the public 1Click API (it allows cross-origin requests). No keys and
 // no wallet: quotes are live, fills are simulated.
-import { createOneClick, intentsQuoteBody, normalizeQuote } from '../src/oneclick.mjs';
+import { createOneClick } from '../src/oneclick.mjs';
 import { prepareOrder } from '../src/order.mjs';
 import { runOrder, scheduleFor } from '../src/engine.mjs';
 import { largestPossibleSlice } from '../src/schedule.mjs';
@@ -13,23 +13,12 @@ import { mulberry32 } from '../src/rng.mjs';
 import { resolveAsset } from '../src/assets.mjs';
 import { memoryJournal, parseJsonl, toJsonl } from '../src/memory-journal.mjs';
 import { toNumber } from '../src/units.mjs';
-import { startWater } from './water.mjs';
 
 // Two committed $500k runs of the same order: a thin market and a deeper one.
 const SAMPLE_RUNS = {
   replay: '../examples/sample-run.jsonl',
-  'replay-top': '../examples/sample-run.jsonl',
   'replay-deep': '../examples/sample-run-2026-11-07.jsonl',
 };
-const LIVE_RUN = '../examples/live-run.jsonl';
-const LIVE_CHAIN = '../examples/live-run-chain.json';
-const WALLET_CAP = '../examples/wallet-cap.json';
-const FREEZE_RUN = '../examples/freeze-run.jsonl';
-const FREEZE_CHAIN = '../examples/freeze-run-chain.json';
-const BASESCAN_TX = 'https://basescan.org/tx/';
-const NEARBLOCKS_TX = 'https://nearblocks.io/txns/';
-const PRIVACY_SNAPSHOT = '../research/confidential/usdc-arb_sol-sol_2026-11-05t03-37-19-519z.json';
-const IMPACT_SIZES = [1_000, 10_000, 50_000, 100_000, 250_000, 500_000, 1_000_000];
 const ASSETS = ['usdc:arb', 'usdc:eth', 'usdc:base', 'usdc:sol', 'usdt:eth', 'usdt:tron', 'eth:eth', 'eth:arb', 'eth:base', 'sol:sol', 'btc:btc', 'wnear:near', 'zec:zec'];
 const CHAINS = { arb: 'Arbitrum', eth: 'Ethereum', base: 'Base', sol: 'Solana', tron: 'Tron', btc: 'Bitcoin', near: 'NEAR', zec: 'Zcash' };
 const DRY_ACCOUNT = 'dry-run.wakeless.near';
@@ -39,7 +28,7 @@ const SVG = 'http://www.w3.org/2000/svg';
 const client = createOneClick();
 const newSeed = () => crypto.getRandomValues(new Uint32Array(1))[0] >>> 1;
 // `idle`: the monitor shows the plan preview until the first run or replay starts.
-const state = { tokens: null, busy: false, impactBusy: false, precheckBusy: false, targetUsd: 500_000, lastRun: null, idle: true, planSeed: newSeed() };
+const state = { tokens: null, busy: false, precheckBusy: false, targetUsd: 500_000, lastRun: null, idle: true, planSeed: newSeed() };
 
 // ---------- small helpers ----------
 
@@ -73,7 +62,6 @@ const mmss = (ms) => {
   const s = Math.max(0, Math.round(ms / 1000));
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 };
-const usdShort = (usd) => (usd >= 1e6 ? `$${usd / 1e6}M` : `$${usd / 1e3}k`);
 const chainName = (id) => CHAINS[id] ?? id.toUpperCase();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const human = (units, decimals) => toNumber(BigInt(units), decimals);
@@ -195,21 +183,21 @@ function wireTicket() {
     if (state.tokens) state.targetUsd = Number($('#amount').value) * selected('#sell').price || state.targetUsd;
     syncAmountHint();
     clearPrecheck();
-    renderChain();
+    renderPlan();
   });
   for (const chip of document.querySelectorAll('#chips button')) {
     chip.addEventListener('click', () => {
       setAmountFromUsd(Number(chip.dataset.usd));
       clearPrecheck();
-      renderChain();
+      renderPlan();
     });
   }
   $('#slices').addEventListener('input', () => {
     $('#slices-out').textContent = $('#slices').value;
     syncRange($('#slices'));
-    renderChain();
+    renderPlan();
   });
-  $('#window').addEventListener('change', renderChain);
+  $('#window').addEventListener('change', renderPlan);
   $('#adverse').addEventListener('input', () => {
     $('#adverse-out').textContent = `${$('#adverse').value} bps`;
     syncRange($('#adverse'));
@@ -220,7 +208,6 @@ function wireTicket() {
     renderPlan();
   });
   for (const range of document.querySelectorAll('input[type="range"]')) syncRange(range);
-  $('#impact-refresh').addEventListener('click', measureImpact);
   $('#precheck-run').addEventListener('click', runPrecheck);
 }
 
@@ -228,12 +215,7 @@ function onPairChange() {
   showError('');
   clearPrecheck();
   if (!state.tokens) return;
-  const sell = selected('#sell');
-  const buy = selected('#buy');
-  $('#impact-pair').textContent = `${sell.symbol} on ${chainName(sell.blockchain)} to ${buy.symbol} on ${chainName(buy.blockchain)}`;
-  $('#impact-refresh').disabled = state.impactBusy;
-  $('#impact-note').textContent = 'Pair changed. Press "Measure again" for live quotes on this pair.';
-  renderChain();
+  renderPlan();
 }
 
 // ---------- pre-trade check ----------
@@ -250,7 +232,7 @@ function setSlices(n) {
   $('#slices').value = String(n);
   $('#slices-out').textContent = String(n);
   syncRange($('#slices'));
-  renderChain();
+  renderPlan();
 }
 
 /** Paints the filled part of a range track (WebKit has no progress pseudo-element). */
@@ -328,88 +310,6 @@ function renderPrecheck(r) {
     });
     out.append(use);
   }
-}
-
-// ---------- hero chart: price impact by size ----------
-
-function drawImpact(results, { final }) {
-  const root = $('#impact-chart');
-  root.textContent = '';
-  const W = 560;
-  const H = 290;
-  const L = 44;
-  const R = 8;
-  const T = 26;
-  const B = 34;
-  const plotW = W - L - R;
-  const plotH = H - T - B;
-  const band = plotW / IMPACT_SIZES.length;
-  const ok = results.filter((r) => r.q.ok);
-  const base = ok.length ? ok[0].q.costBps : 0;
-  const extras = ok.map((r) => r.q.costBps - base);
-  const yMax = Math.max(10, Math.ceil(Math.max(0, ...extras) / 10) * 10);
-  const y = (bps) => T + plotH - (Math.max(0, bps) / yMax) * plotH;
-
-  const grid = svg('g', { class: 'grid axis' }, root);
-  for (const tick of [0, yMax / 2, yMax]) {
-    svg('line', { x1: L, x2: W - R, y1: y(tick), y2: y(tick) }, grid);
-    svg('text', { x: L - 8, y: y(tick) + 4, 'text-anchor': 'end' }, grid).textContent = tick === 0 ? '0' : `+${tick}`;
-  }
-  svg('text', { x: L - 8, y: T - 12, 'text-anchor': 'end' }, grid).textContent = 'bps';
-
-  IMPACT_SIZES.forEach((usd, i) => {
-    const cx = L + band * (i + 0.5);
-    const bw = band * 0.56;
-    const r = results.find((x) => x.usd === usd);
-    const axis = svg('text', { x: cx, y: H - 12, 'text-anchor': 'middle', class: 'axis' }, root);
-    axis.textContent = usdShort(usd);
-    if (!r) {
-      svg('rect', { x: cx - bw / 2, y: T, width: bw, height: plotH, rx: 4, class: 'bar-pending' }, root);
-      return;
-    }
-    if (!r.q.ok) {
-      svg('rect', { x: cx - bw / 2, y: T, width: bw, height: plotH, rx: 4, class: final ? 'bar none' : 'bar-pending' }, root);
-      const label = svg('text', { x: cx, y: T - 8, 'text-anchor': 'middle', class: 'bar-label none' }, root);
-      label.textContent = r.q.noLiquidity ? 'no quote' : `HTTP ${r.q.status}`;
-      return;
-    }
-    const extra = r.q.costBps - base;
-    const top = Math.min(y(extra), T + plotH - 2);
-    if (final) {
-      svg('rect', { x: cx - bw / 2, y: top, width: bw, height: T + plotH - top, rx: 4, class: i === 0 ? 'bar base' : 'bar', style: `animation-delay:${i * 70}ms` }, root);
-    } else {
-      svg('rect', { x: cx - bw / 2, y: T, width: bw, height: plotH, rx: 4, class: 'bar-pending', style: 'fill: rgba(94,224,193,0.10)' }, root);
-    }
-    const label = svg('text', { x: cx, y: (final ? top : T) - 8, 'text-anchor': 'middle', class: 'bar-label' }, root);
-    label.textContent = i === 0 ? 'base' : signed(Math.abs(extra) < 0.05 ? 0 : extra, 1);
-  });
-}
-
-async function measureImpact() {
-  if (state.impactBusy || !state.tokens) return;
-  state.impactBusy = true;
-  $('#impact-refresh').disabled = true;
-  const sell = selected('#sell');
-  const buy = selected('#buy');
-  $('#impact-pair').textContent = `${sell.symbol} on ${chainName(sell.blockchain)} to ${buy.symbol} on ${chainName(buy.blockchain)}`;
-  const results = [];
-  drawImpact(results, { final: false });
-  for (const usd of IMPACT_SIZES) {
-    $('#impact-note').textContent = `Quoting ${usdShort(usd)} through 1Click.`;
-    const amount = BigInt(Math.round((usd / sell.price) * 10 ** sell.decimals));
-    const body = intentsQuoteBody({ sellAsset: sell.assetId, buyAsset: buy.assetId, amount, account: DRY_ACCOUNT });
-    const res = await client.quote(body);
-    results.push({ usd, q: normalizeQuote(res, { sellDecimals: sell.decimals, buyDecimals: buy.decimals, amountIn: amount }) });
-    drawImpact(results, { final: false });
-  }
-  drawImpact(results, { final: true });
-  const time = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  const okCount = results.filter((r) => r.q.ok).length;
-  $('#impact-note').textContent = okCount
-    ? `Live 1Click quotes at ${time}. Each includes the same platform fee, which cancels out against the $1k base.`
-    : `1Click returned no quotes for this pair at ${time}.`;
-  state.impactBusy = false;
-  $('#impact-refresh').disabled = false;
 }
 
 // ---------- execution monitor ----------
@@ -492,7 +392,7 @@ function renderPlan() {
     stat('A slice every', every, 'on average, at a random moment'),
     stat('Floor', `${order.maxAdverseBps} bps`, 'under the arrival price'),
   );
-  caption.textContent = `One possible schedule for this ticket: ${order.slices} slices over ${span}. Each run draws its own.`;
+  caption.textContent = `One possible draw: ${order.slices} slices over ${span}.`;
   $('#clock').textContent = `00:00 / ${mmss(horizon)}`;
 }
 
@@ -645,7 +545,6 @@ function startMonitor({ speed }) {
     renderResult(report, events);
     body.classList.add('has-result');
     state.lastRun = report;
-    renderChain();
   }
 
   function fail(message) {
@@ -802,259 +701,10 @@ async function replay(file) {
   }
 }
 
-// ---------- what the chain sees ----------
-
-function renderChain() {
-  // The plan preview follows the same ticket inputs.
-  renderPlan();
-  const spec = currentSpec();
-  const total = Number(spec.amount);
-  if (!(total > 0)) return;
-  const sellRef = state.tokens ? selected('#sell') : { symbol: 'USDC', blockchain: 'arb' };
-  const buyRef = state.tokens ? selected('#buy') : { symbol: 'SOL', blockchain: 'sol' };
-  const n = spec.slices;
-  const windowMs = spec.horizonMinutes * 60_000;
-  const each = total / n;
-  const windowText = spec.horizonMinutes >= 60 ? `${spec.horizonMinutes / 60} hour${spec.horizonMinutes > 60 ? 's' : ''}` : `${spec.horizonMinutes} minutes`;
-  $('#chain-order').textContent = `${num(total, 2)} ${sellRef.symbol} to ${buyRef.symbol} in ${n} slices over ${windowText}.`;
-
-  const pub = $('#ledger-public');
-  pub.textContent = '';
-  const shown = Math.min(n, 5);
-  for (let i = 0; i < shown; i++) {
-    pub.append(
-      html('li', {}, [
-        html('span', { class: 't', text: mmss(((i + 0.5) * windowMs) / n) }),
-        html('span', {}, [html('span', { class: 'addr', text: '0x7a3f...9c21' }), ` swaps ${sellRef.symbol} for ${buyRef.symbol}`]),
-        html('span', { class: 'amt', text: `${num(each, 2)} ${sellRef.symbol}` }),
-      ]),
-    );
-  }
-  if (n > shown) pub.append(html('li', { class: 'more', text: `${n - shown} more swaps: same address, same size, every ${mmss(windowMs / n)}` }));
-
-  const run = state.lastRun && !state.lastRun.aborted && state.lastRun.sell.symbol === sellRef.symbol && state.lastRun.buy.symbol === buyRef.symbol ? state.lastRun : null;
-  const out = run ? `${num(Number(run.received), 4)} ${buyRef.symbol}` : `the ${buyRef.symbol}`;
-  const quiet = $('#ledger-wakeless');
-  quiet.textContent = '';
-  quiet.append(
-    html('li', {}, [
-      html('span', { class: 't', text: '00:00' }),
-      html('span', {}, [`Deposit ${num(total, 2)} ${sellRef.symbol} into NEAR Intents `, html('span', { class: 'pub', text: 'public' })]),
-      html('span', { class: 'amt', text: chainName(sellRef.blockchain) }),
-    ]),
-    html('li', { class: 'sealed' }, [html('b', { text: `${n} slices, random sizes and times` }), 'Settled inside Confidential Intents balances. Not on a public ledger.']),
-    html('li', {}, [
-      html('span', { class: 't', text: mmss(windowMs) }),
-      html('span', {}, [`Withdraw ${out} `, html('span', { class: 'pub', text: 'public' })]),
-      html('span', { class: 'amt', text: chainName(buyRef.blockchain) }),
-    ]),
-  );
-}
-
-async function loadPrivacySnapshot() {
-  try {
-    const res = await fetch(PRIVACY_SNAPSHOT);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const snap = await res.json();
-    const by = new Map();
-    for (const row of snap.rows) {
-      const out = row.response?.quote?.amountOut;
-      if (!out) continue;
-      if (!by.has(row.usd)) by.set(row.usd, {});
-      by.get(row.usd)[row.mode] = Number(out) / 1e9;
-    }
-    const tbody = document.querySelector('#privacy-table tbody');
-    tbody.textContent = '';
-    const advanced = [];
-    for (const [usd, v] of [...by.entries()].sort((a, b) => a[0] - b[0])) {
-      if (v.public == null || v.basic == null) continue;
-      const diff = (v.basic / v.public - 1) * 10_000;
-      if (v.advanced != null) advanced.push((v.advanced / v.public - 1) * 10_000);
-      tbody.append(
-        html('tr', {}, [
-          html('td', { text: `$${num(usd, 0)}` }),
-          html('td', { text: num(v.public, 4) }),
-          html('td', { text: num(v.basic, 4) }),
-          html('td', { class: diff >= 0 ? 'good' : '', text: `${signed(diff, 2)} bps` }),
-        ]),
-      );
-    }
-    const when = new Date(snap.takenAt);
-    const adv = advanced.length ? ` The advanced mode returned ${signed(Math.min(...advanced), 2)} to ${signed(Math.max(...advanced), 2)} bps against public.` : '';
-    $('#privacy-when').textContent = `Snapshot of ${when.toISOString().slice(0, 16).replace('T', ' ')} UTC, confidentiality "basic". Positive means the confidential quote returned more SOL.${adv}`;
-  } catch (err) {
-    $('#privacy-when').textContent = `Snapshot unavailable: ${err.message}`;
-  }
-}
-
-// ---------- live on mainnet ----------
-
-const utc = (iso) => new Date(iso).toISOString().slice(11, 16);
-const shortHash = (hash) => (hash.length > 16 ? `${hash.slice(0, 6)}...${hash.slice(-6)}` : hash);
-const txLink = (hash) => html('a', { href: `${BASESCAN_TX}${hash}`, target: '_blank', rel: 'noopener', text: 'Base tx' });
-
-/** The committed live run: its journal plus the public chain facts around it. */
-async function loadLiveRun() {
-  try {
-    const [runRes, chainRes] = await Promise.all([fetch(LIVE_RUN), fetch(LIVE_CHAIN)]);
-    if (!runRes.ok || !chainRes.ok) throw new Error(`HTTP ${runRes.ok ? chainRes.status : runRes.status}`);
-    const events = parseJsonl(await runRes.text());
-    const chain = await chainRes.json();
-    const r = buildReport(events);
-    const order = events.find((e) => e.type === 'order').order;
-    const fills = events.filter((e) => e.type === 'fill' && BigInt(e.amountIn) > 0n);
-    const sol = Number(chain.publicLedger.confidentialAtTheSameTime['nep141:sol.omft.near']) / 1e9;
-    const first = fills[0];
-    const last = fills[fills.length - 1];
-
-    $('#proof-live').textContent = '';
-    $('#proof-live').append(html('b', { text: `${fills.length} of ${fills.length}` }), ` slices settled on NEAR Intents, 5 Nov`);
-    $('#proof-ledger').textContent = '';
-    $('#proof-ledger').append(html('b', { text: `0 ${r.buy.symbol}` }), ` public at block ${num(chain.publicLedger.block, 0)}`);
-
-    $('#live-summary').textContent =
-      `${chain.deposit.amount} ETH on Base, worked into ${r.buy.symbol} in ${r.slices.fills} slices by a policy-bound agent on ` +
-      `5 November 2026, then paid back to its owner. Real funds, settled on NEAR Intents.`;
-
-    const ledger = $('#live-ledger');
-    ledger.textContent = '';
-    ledger.append(
-      html('li', {}, [
-        html('span', { class: 't', text: utc(chain.deposit.at) }),
-        html('span', {}, [
-          `Deposit ${chain.deposit.amount} ETH to the agent's address `,
-          html('span', { class: 'pub' }, ['public, ', txLink(chain.deposit.tx)]),
-        ]),
-      ]),
-      html('li', { class: 'sealed' }, [
-        html('b', { text: `${fills.length} slices, ${utc(first.wall)} to ${utc(last.wall)} UTC` }),
-        html('p', {
-          text:
-            `ETH to ${r.buy.symbol} in confidential form. The public intents.near ledger showed the agent holding 0 ${r.buy.symbol} ` +
-            `at block ${num(chain.publicLedger.block, 0)}, while its confidential balance held ${num(sol, 6)} ${r.buy.symbol}.`,
-        }),
-      ]),
-      html('li', {}, [
-        html('span', { class: 't', text: utc(chain.withdrawal.at) }),
-        html('span', {}, [
-          `${num(Number(chain.withdrawal.amount), 6)} ETH back to the owner's wallet `,
-          html('span', { class: 'pub' }, ['public, ', txLink(chain.withdrawal.tx)]),
-        ]),
-      ]),
-    );
-    const proof = $('#live-proof');
-    proof.textContent = '';
-    proof.append(
-      `The agent is NEAR account ${shortHash(chain.agent.nearAccount)}. Its policy: ${chain.agent.policy}. ` +
-        'Read the public ledger at that block yourself, no keys needed:',
-      html('code', { text: chain.publicLedger.check }),
-    );
-
-    const tbody = document.querySelector('#live-table tbody');
-    tbody.textContent = '';
-    for (const f of fills) {
-      const sold = toNumber(BigInt(f.amountIn), order.sell.decimals);
-      const got = toNumber(BigInt(f.amountOut), order.buy.decimals);
-      const vsQuote = f.quotedAmountOut ? (Number(BigInt(f.amountOut)) / Number(BigInt(f.quotedAmountOut)) - 1) * 10_000 : null;
-      const hash = f.txHashes?.[0] ?? '';
-      tbody.append(
-        html('tr', {}, [
-          html('td', { text: f.sliceId }),
-          html('td', { text: num(sold, 6) }),
-          html('td', { text: num(got, 6) }),
-          html('td', { class: vsQuote != null && vsQuote < 0 ? 'miss' : 'good', text: `${signed(vsQuote, 1)} bps` }),
-          html('td', { class: 'hash', title: hash, text: shortHash(hash) }),
-        ]),
-      );
-    }
-    $('#live-note').textContent =
-      `Each slice was submitted as a confidential swap whose minimum output was the desk's floor, and all ${fills.length} settled at or above it, ` +
-      `${num(Number(r.received), 6)} ${r.buy.symbol} in total. "vs preview" is the settled amount against the agent's own preview for that slice. ` +
-      `At $6 there is no price impact to save, so this run proves the path, not the saving; the $500,000 replay above shows the saving.`;
-  } catch (err) {
-    $('#live-summary').textContent = `Live run unavailable: ${err.message}`;
-  }
-}
-
-// ---------- rules the wallet enforces: the slice cap and the owner's freeze ----------
-
-const utcs = (iso) => new Date(iso).toISOString().slice(11, 19);
-const nearLink = (hash) => html('a', { href: `${NEARBLOCKS_TX}${hash}`, target: '_blank', rel: 'noopener', text: 'NEAR tx' });
-const CAP_LABELS = {
-  'whole order as one swap': 'The whole order, one swap',
-  'exactly the cap': 'Exactly the cap',
-  'one unit above the cap': 'One wei above the cap',
-};
-
-/** The committed cap check (dry swaps through the desk's grant) and the preview run the owner froze. */
-async function loadWalletRules() {
-  try {
-    const responses = await Promise.all([fetch(WALLET_CAP), fetch(FREEZE_RUN), fetch(FREEZE_CHAIN)]);
-    const failed = responses.find((res) => !res.ok);
-    if (failed) throw new Error(`HTTP ${failed.status}`);
-    const [cap, events, chain] = [await responses[0].json(), parseJsonl(await responses[1].text()), await responses[2].json()];
-
-    const tbody = document.querySelector('#cap-table tbody');
-    tbody.textContent = '';
-    for (const s of cap.swaps) {
-      const refused = s.warnings.includes('policy_transaction_limit_exceeded');
-      tbody.append(
-        html('tr', {}, [
-          html('td', {}, [CAP_LABELS[s.label] ?? s.label, html('span', { class: 'amt', text: `${s.amountHuman} ETH` })]),
-          html('td', { class: refused ? 'miss' : 'good', text: refused ? 'refused' : 'allowed' }),
-        ]),
-      );
-    }
-    const whole = cap.swaps[0];
-    const perSwap = cap.swaps[1];
-    const share = (Number(perSwap.amount) / Number(whole.amount)) * 100;
-    const capNote = $('#cap-note');
-    capNote.textContent = '';
-    capNote.append(
-      `The owner signed it into the agent's policy (revision ${cap.policy.revision}, `,
-      nearLink(cap.policy.transactionHash),
-      `): no swap above ${perSwap.amountHuman} ETH, the largest slice any schedule of this ${cap.order.slices}-slice order can draw ` +
-        `(${num(share, 0)}% of it), and no more than the order a day. The Agent API checks it on every swap of every grant. ` +
-        'Asked dry through the desk\'s own grant on 7 Nov; every answer also warned insufficient_balance, as the agent was empty. ' +
-        'The NEAR transaction carries the policy encrypted: the cap is not in it in plain text.',
-    );
-
-    const order = events.find((e) => e.type === 'order');
-    const halt = events.find((e) => e.type === 'halt');
-    const stopped = events.find((e) => e.type === 'slice' && e.decision.action === 'stop');
-    const ledger = $('#freeze-ledger');
-    ledger.textContent = '';
-    ledger.append(
-      html('li', {}, [
-        html('span', { class: 't', text: utcs(order.wall) }),
-        html('span', { text: `A preview run starts: ${order.order.amount} ETH (Base) to SOL in ${order.order.slices} slices.` }),
-      ]),
-      html('li', {}, [
-        html('span', { class: 't', text: utcs(chain.freeze.appliedAt) }),
-        html('span', {}, [
-          'The owner freezes the wallet ',
-          html('span', { class: 'pub' }, [`policy revision ${chain.freeze.revision}, `, nearLink(chain.freeze.nearTx)]),
-        ]),
-      ]),
-      html('li', {}, [
-        html('span', { class: 't', text: utcs(halt.wall) }),
-        html('span', { text: `Slice ${stopped.slice.id} asks for its quote. The API answers ${stopped.quote.q.code} and the desk stops.` }),
-      ]),
-    );
-    $('#freeze-note').textContent =
-      'A frozen wallet gets no swap, quote or withdrawal from the Agent API, so stopping needs nothing from the desk. ' +
-      `The desk reads that answer as final and does not wait for a later slot. Slice 1, requested before the freeze applied, was the last one priced. ` +
-      `The owner unfroze the wallet at ${utcs(chain.unfreeze.appliedAt)} (revision ${chain.unfreeze.revision}).`;
-  } catch (err) {
-    $('#cap-note').textContent = `Wallet rules unavailable: ${err.message}`;
-  }
-}
-
 // ---------- committed replays: what each one got, shown before it is played ----------
 
 async function loadReplayStats() {
   const runs = { replay: SAMPLE_RUNS.replay, 'replay-deep': SAMPLE_RUNS['replay-deep'] };
-  const got = {};
   await Promise.all(
     Object.entries(runs).map(async ([id, file]) => {
       try {
@@ -1062,7 +712,6 @@ async function loadReplayStats() {
         if (!res.ok) return;
         const o = buildReport(parseJsonl(await res.text())).vsOneShot;
         if (o.deltaBps == null) return;
-        got[id] = o;
         const label = `${signed(o.deltaBps, 1)} bps vs one swap${o.deltaUsd != null ? `, about $${num(Math.abs(o.deltaUsd), 0)}` : ''}`;
         document.querySelector(`.rc-val[data-run="${id}"]`).textContent = label;
       } catch {
@@ -1070,14 +719,9 @@ async function loadReplayStats() {
       }
     }),
   );
-  if (got.replay && got['replay-deep']) {
-    const proof = $('#proof-replay');
-    proof.textContent = '';
-    proof.append(html('b', { text: signed(got.replay.deltaBps, 1) }), ' and ', html('b', { text: signed(got['replay-deep'].deltaBps, 1) }), ' bps against one swap');
-  }
 }
 
-// ---------- motion: blocks rise once as they enter, the nav follows the reader ----------
+// ---------- motion: blocks rise once as they enter ----------
 
 function startMotion() {
   const blocks = document.querySelectorAll('.reveal');
@@ -1090,51 +734,24 @@ function startMotion() {
       for (const e of entries) {
         if (!e.isIntersecting) continue;
         e.target.classList.add('in');
-        const ledger = e.target.querySelector('.ledger');
-        if (ledger) {
-          [...ledger.children].forEach((li, i) => li.style.setProperty('--i', String(i)));
-          ledger.classList.add('ledger-in');
-          setTimeout(() => ledger.classList.remove('ledger-in'), 1600);
-        }
         reveal.unobserve(e.target);
       }
     },
     { rootMargin: '0px 0px -12% 0px', threshold: 0.08 },
   );
   for (const b of blocks) reveal.observe(b);
-
-  const links = new Map([...document.querySelectorAll('.topnav a[href^="#"]')].map((a) => [a.getAttribute('href').slice(1), a]));
-  const spy = new IntersectionObserver(
-    (entries) => {
-      for (const e of entries) {
-        if (!e.isIntersecting) continue;
-        for (const [id, a] of links) a.toggleAttribute('aria-current', id === e.target.id);
-        if (links.has(e.target.id)) links.get(e.target.id).setAttribute('aria-current', 'true');
-      }
-    },
-    { rootMargin: '-45% 0px -50% 0px' },
-  );
-  for (const id of links.keys()) {
-    const section = document.getElementById(id);
-    if (section) spy.observe(section);
-  }
 }
 
 // ---------- start ----------
 
 async function init() {
-  startWater($('#water'));
   wireTicket();
-  renderChain();
+  renderPlan();
   startMotion();
-  loadPrivacySnapshot();
-  loadLiveRun();
-  loadWalletRules();
   loadReplayStats();
   const res = await client.tokens();
   if (!res.ok || !Array.isArray(res.json)) {
     setStatus('down', '1Click unreachable. The replay still works.');
-    $('#impact-note').textContent = 'Live quotes are unavailable right now.';
     $('#plan-caption').dataset.down = '1Click is unreachable, so there is no token list to plan with. The replays still work.';
     renderPlan();
     return;
@@ -1145,7 +762,6 @@ async function init() {
   populateAssets(state.tokens);
   setAmountFromUsd(state.targetUsd);
   onPairChange();
-  measureImpact();
 }
 
 init();

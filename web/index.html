@@ -49,55 +49,14 @@
       <span class="dot" aria-hidden="true"></span>
       <span id="status-text">Connecting to 1Click</span>
     </div>
-    <nav class="topnav" aria-label="Sections">
-      <a href="#desk">Desk</a>
-      <a href="#chain">What the chain sees</a>
-      <a href="#live">Live run</a>
+    <nav class="topnav" aria-label="Links">
+      <a href="/">How it works</a>
       <a class="topnav-source" href="https://github.com/superskie/wakeless" rel="noopener">Source</a>
     </nav>
   </header>
 
   <main id="top">
-    <section class="hero">
-      <canvas id="water" aria-hidden="true"></canvas>
-      <div class="hero-copy">
-        <p class="eyebrow">NEAR Intents <span>/</span> 1Click <span>/</span> Confidential Intents</p>
-        <h1><span class="line"><span>Big trades.</span></span><span class="line"><span><em>No wake.</em></span></span></h1>
-        <p class="lede">Wakeless works a large cross-chain swap in randomized slices through NEAR Intents, so it pays less price impact and leaves no pattern for wallet watchers to trade against.</p>
-        <div class="hero-cta">
-          <a class="btn primary" href="#desk">Work an order</a>
-          <button class="btn ghost" type="button" id="replay-top">Replay a $500k run</button>
-        </div>
-        <p class="fineprint">Every price on this page is a live 1Click quote. Dry runs simulate the fills: no wallet, no funds.</p>
-      </div>
-
-      <figure class="impact card" id="impact">
-        <figcaption class="impact-head">
-          <div>
-            <p class="card-kicker"><span class="live-dot" aria-hidden="true"></span>Live quotes</p>
-            <h2>What size costs right now</h2>
-            <p>Extra cost against a $1,000 swap, <span id="impact-pair">USDC on Arbitrum to SOL on Solana</span></p>
-          </div>
-          <button class="btn small" type="button" id="impact-refresh" disabled>Measure again</button>
-        </figcaption>
-        <svg id="impact-chart" viewBox="0 0 560 290" role="img" aria-label="Extra cost in basis points by order size"></svg>
-        <p class="chart-note" id="impact-note">Measuring with live quotes.</p>
-      </figure>
-    </section>
-
-    <ul class="proof" aria-label="What has been shown so far">
-      <li><span class="proof-k">Mainnet</span><span class="proof-v" id="proof-live">A live run on NEAR Intents</span></li>
-      <li><span class="proof-k">Public ledger, mid-run</span><span class="proof-v" id="proof-ledger">Nothing between deposit and withdrawal</span></li>
-      <li><span class="proof-k">$500,000, replayed</span><span class="proof-v" id="proof-replay">Two committed runs</span></li>
-    </ul>
-
     <section class="desk-section" id="desk">
-      <header class="section-head reveal">
-        <p class="index">01 <span>/</span> Desk</p>
-        <h2>Work an <em>order</em></h2>
-        <p>Pick a pair and a size. The desk quotes it live through 1Click, slices it on a random schedule and reports what the slices got against one swap. Nothing is signed.</p>
-      </header>
-
       <div class="desk">
         <form class="ticket card reveal" id="ticket" novalidate>
           <h3>Order ticket</h3>
@@ -154,10 +113,9 @@
                 </select>
               </label>
             </div>
-            <label class="field">
+            <label class="field" title="A slice fills only if its quote is within this distance of the arrival price.">
               <span class="field-label">Max adverse move <output id="adverse-out">40 bps</output></span>
               <input type="range" id="adverse" min="10" max="100" step="5" value="40">
-              <span class="hint">A slice fills only if its quote is within this distance of the arrival price.</span>
             </label>
             <fieldset class="speed">
               <legend class="field-label">Playback</legend>
@@ -172,9 +130,8 @@
           <div class="precheck" id="precheck">
             <div class="precheck-head">
               <p class="group-label">Pre-trade check</p>
-              <button class="btn ghost small" type="button" id="precheck-run">Check this order first</button>
+              <button class="btn ghost small" type="button" id="precheck-run" title="Live quotes at several slice sizes: is slicing worth it right now, and into how many?">Check this order first</button>
             </div>
-            <span class="hint">Live quotes at several slice sizes: is slicing worth it right now, and into how many?</span>
             <div id="precheck-out" aria-live="polite" hidden></div>
           </div>
 
@@ -217,8 +174,7 @@
             <ul class="plan-stats" id="plan-stats" aria-label="This plan"></ul>
             <div class="idle-grid">
               <div class="idle-replay">
-                <p class="idle-title">Nothing is working yet.</p>
-                <p>Press <b>Work this order</b>, or replay one of the two committed $500,000 runs, USDC on Arbitrum to SOL.</p>
+                <p class="group-label">Replay a committed $500,000 run, USDC to SOL</p>
                 <div class="replay-pair">
                   <button class="replay-card" type="button" id="replay" title="5 Nov 2026, a thin market">
                     <span class="rc-date">5 Nov 2026</span>
@@ -232,12 +188,6 @@
                   </button>
                 </div>
               </div>
-              <ol class="next">
-                <li><b>Arrival.</b> Quote one slice and the whole order at once.</li>
-                <li><b>Slices.</b> Each fires at a random moment inside its own slot, at a random size.</li>
-                <li><b>Floor.</b> A slice fills only at or above the floor; otherwise it waits, splits or stays unfilled.</li>
-                <li><b>Report.</b> Compare the slices with doing it in one swap.</li>
-              </ol>
             </div>
           </div>
 
@@ -249,96 +199,7 @@
       </div>
     </section>
 
-    <section class="chain" id="chain">
-      <header class="section-head reveal">
-        <p class="index">02 <span>/</span> Privacy</p>
-        <h2>What the chain <em>sees</em></h2>
-        <p>The same order, worked two ways. <span id="chain-order">500,000 USDC to SOL in 16 slices over 30 minutes.</span></p>
-      </header>
-      <div class="compare">
-        <article class="card exposed reveal">
-          <header>
-            <h3>A TWAP from one wallet</h3>
-            <span class="badge exposed">Public</span>
-          </header>
-          <ol class="ledger" id="ledger-public"></ol>
-          <p class="note">Same address, same size, fixed rhythm. After two fills, anyone can estimate what is left and trade ahead of it.</p>
-        </article>
-        <article class="card quiet reveal" style="--d: 90ms">
-          <header>
-            <h3>Wakeless, live mode</h3>
-            <a class="badge quiet" href="#live">Ran on mainnet</a>
-          </header>
-          <ol class="ledger" id="ledger-wakeless"></ol>
-          <p class="note">The deposit and the withdrawal are public. Everything between them, every slice and balance, settles in Confidential Intents and stays off the public ledger. Live mode runs on the NEAR Intents Agent API: the agent can only swap and pay its owner back.</p>
-        </article>
-      </div>
-
-      <div class="privacy card reveal" id="privacy">
-        <div class="privacy-copy">
-          <h3>Privacy has no measured price premium</h3>
-          <p>Confidential and public quotes for the same order at the same moment, USDC on Arbitrum to SOL on Solana. Taken with a partner key, which never reaches this page, so the table is a committed snapshot.</p>
-          <p class="fineprint" id="privacy-when"></p>
-        </div>
-        <table class="privacy-table" id="privacy-table">
-          <thead><tr><th>Order</th><th>Public, SOL</th><th>Confidential, SOL</th><th>Difference</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="live" id="live">
-      <header class="section-head reveal">
-        <p class="index">03 <span>/</span> Proof</p>
-        <h2>Live on <em>mainnet</em></h2>
-        <p id="live-summary">Loading the committed live run.</p>
-      </header>
-      <div class="live-grid card reveal">
-        <div class="live-path">
-          <h3>What the public saw</h3>
-          <ol class="ledger" id="live-ledger"></ol>
-          <p class="live-check" id="live-proof"></p>
-        </div>
-        <div class="live-fills">
-          <h3>Four slices, settled</h3>
-          <div class="table-scroll">
-            <table class="privacy-table live-table" id="live-table">
-              <thead><tr><th>Slice</th><th>Sold, ETH</th><th>Received, SOL</th><th>vs preview</th><th class="hash">Intent hash</th></tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-          <p class="fineprint" id="live-note"></p>
-        </div>
-      </div>
-      <div class="live-grid rules-grid card reveal" id="rules">
-        <div class="live-fills">
-          <h3>A cap the desk can not lift</h3>
-          <div class="table-scroll">
-            <table class="privacy-table live-table" id="cap-table">
-              <thead><tr><th>Asked the wallet for</th><th>Answer</th></tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-          <p class="fineprint" id="cap-note">Loading the committed check.</p>
-        </div>
-        <div class="live-path">
-          <h3>The owner's kill switch</h3>
-          <ol class="ledger" id="freeze-ledger"></ol>
-          <p class="fineprint" id="freeze-note"></p>
-        </div>
-      </div>
-    </section>
   </main>
 
-  <footer class="foot">
-    <div class="foot-sign">
-      <p class="foot-mark">Wakeless</p>
-      <p class="foot-line">Big trades. <em>No wake.</em></p>
-    </div>
-    <div class="foot-meta">
-      <p>Built at NEAR HACKATHON, November 2026. MIT license.</p>
-      <p>Quotes come from the public 1Click API of NEAR Intents. Nothing on this page signs a transaction or moves funds.</p>
-    </div>
-  </footer>
 </body>
 </html>
