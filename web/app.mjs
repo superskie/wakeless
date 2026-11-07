@@ -196,12 +196,15 @@ function wireTicket() {
   }
   $('#slices').addEventListener('input', () => {
     $('#slices-out').textContent = $('#slices').value;
+    syncRange($('#slices'));
     renderChain();
   });
   $('#window').addEventListener('change', renderChain);
   $('#adverse').addEventListener('input', () => {
     $('#adverse-out').textContent = `${$('#adverse').value} bps`;
+    syncRange($('#adverse'));
   });
+  for (const range of document.querySelectorAll('input[type="range"]')) syncRange(range);
   $('#impact-refresh').addEventListener('click', measureImpact);
   $('#precheck-run').addEventListener('click', runPrecheck);
 }
@@ -231,7 +234,15 @@ function clearPrecheck() {
 function setSlices(n) {
   $('#slices').value = String(n);
   $('#slices-out').textContent = String(n);
+  syncRange($('#slices'));
   renderChain();
+}
+
+/** Paints the filled part of a range track (WebKit has no progress pseudo-element). */
+function syncRange(input) {
+  const min = Number(input.min);
+  const span = Number(input.max) - min || 1;
+  input.style.setProperty('--p', `${((Number(input.value) - min) / span) * 100}%`);
 }
 
 async function runPrecheck() {
@@ -355,7 +366,7 @@ function drawImpact(results, { final }) {
       svg('rect', { x: cx - bw / 2, y: T, width: bw, height: plotH, rx: 4, class: 'bar-pending', style: 'fill: rgba(94,224,193,0.10)' }, root);
     }
     const label = svg('text', { x: cx, y: (final ? top : T) - 8, 'text-anchor': 'middle', class: 'bar-label' }, root);
-    label.textContent = i === 0 ? 'base' : signed(extra, 1);
+    label.textContent = i === 0 ? 'base' : signed(Math.abs(extra) < 0.05 ? 0 : extra, 1);
   });
 }
 
@@ -647,7 +658,7 @@ function renderResult(r, events) {
 // ---------- runs ----------
 
 function scrollToDesk() {
-  const top = $('#desk').getBoundingClientRect().top + window.scrollY - 76;
+  const top = $('.desk').getBoundingClientRect().top + window.scrollY - 76;
   window.scrollTo({ top, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 }
 
@@ -810,6 +821,11 @@ async function loadLiveRun() {
     const first = fills[0];
     const last = fills[fills.length - 1];
 
+    $('#proof-live').textContent = '';
+    $('#proof-live').append(html('b', { text: `${fills.length} of ${fills.length}` }), ` slices settled on NEAR Intents, 5 Nov`);
+    $('#proof-ledger').textContent = '';
+    $('#proof-ledger').append(html('b', { text: `0 ${r.buy.symbol}` }), ` public at block ${num(chain.publicLedger.block, 0)}`);
+
     $('#live-summary').textContent =
       `${chain.deposit.amount} ETH on Base, worked into ${r.buy.symbol} in ${r.slices.fills} slices by a policy-bound agent on ` +
       `5 November 2026, then paid back to its owner. Real funds, settled on NEAR Intents.`;
@@ -874,14 +890,86 @@ async function loadLiveRun() {
   }
 }
 
+// ---------- committed replays: what each one got, shown before it is played ----------
+
+async function loadReplayStats() {
+  const runs = { replay: SAMPLE_RUNS.replay, 'replay-deep': SAMPLE_RUNS['replay-deep'] };
+  const got = {};
+  await Promise.all(
+    Object.entries(runs).map(async ([id, file]) => {
+      try {
+        const res = await fetch(file);
+        if (!res.ok) return;
+        const o = buildReport(parseJsonl(await res.text())).vsOneShot;
+        if (o.deltaBps == null) return;
+        got[id] = o;
+        const label = `${signed(o.deltaBps, 1)} bps vs one swap${o.deltaUsd != null ? `, about $${num(Math.abs(o.deltaUsd), 0)}` : ''}`;
+        document.querySelector(`.rc-val[data-run="${id}"]`).textContent = label;
+      } catch {
+        // The card still replays; it just does not show the result first.
+      }
+    }),
+  );
+  if (got.replay && got['replay-deep']) {
+    const proof = $('#proof-replay');
+    proof.textContent = '';
+    proof.append(html('b', { text: signed(got.replay.deltaBps, 1) }), ' and ', html('b', { text: signed(got['replay-deep'].deltaBps, 1) }), ' bps against one swap');
+  }
+}
+
+// ---------- motion: blocks rise once as they enter, the nav follows the reader ----------
+
+function startMotion() {
+  const blocks = document.querySelectorAll('.reveal');
+  if (!('IntersectionObserver' in window)) {
+    for (const b of blocks) b.classList.add('in');
+    return;
+  }
+  const reveal = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        e.target.classList.add('in');
+        const ledger = e.target.querySelector('.ledger');
+        if (ledger) {
+          [...ledger.children].forEach((li, i) => li.style.setProperty('--i', String(i)));
+          ledger.classList.add('ledger-in');
+          setTimeout(() => ledger.classList.remove('ledger-in'), 1600);
+        }
+        reveal.unobserve(e.target);
+      }
+    },
+    { rootMargin: '0px 0px -12% 0px', threshold: 0.08 },
+  );
+  for (const b of blocks) reveal.observe(b);
+
+  const links = new Map([...document.querySelectorAll('.topnav a[href^="#"]')].map((a) => [a.getAttribute('href').slice(1), a]));
+  const spy = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        for (const [id, a] of links) a.toggleAttribute('aria-current', id === e.target.id);
+        if (links.has(e.target.id)) links.get(e.target.id).setAttribute('aria-current', 'true');
+      }
+    },
+    { rootMargin: '-45% 0px -50% 0px' },
+  );
+  for (const id of links.keys()) {
+    const section = document.getElementById(id);
+    if (section) spy.observe(section);
+  }
+}
+
 // ---------- start ----------
 
 async function init() {
   startWater($('#water'));
   wireTicket();
   renderChain();
+  startMotion();
   loadPrivacySnapshot();
   loadLiveRun();
+  loadReplayStats();
   const res = await client.tokens();
   if (!res.ok || !Array.isArray(res.json)) {
     setStatus('down', '1Click unreachable. The replay still works.');

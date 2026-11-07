@@ -5,9 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Wakeless: big trades, no wake</title>
   <meta name="description" content="Work a large cross-chain swap in randomized slices through NEAR Intents. Live 1Click quotes, dry run, no funds.">
-  <meta name="theme-color" content="#0a0d11">
+  <meta name="theme-color" content="#07090c">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230e1318'/%3E%3Crect x='7' y='9' width='3' height='11' rx='1.5' fill='%235ee0c1'/%3E%3Crect x='14.5' y='13' width='3' height='7' rx='1.5' fill='%235ee0c1'/%3E%3Crect x='22' y='7' width='3' height='13' rx='1.5' fill='%235ee0c1'/%3E%3Crect x='6' y='24' width='20' height='2' rx='1' fill='%23e9eef4' opacity='.55'/%3E%3C/svg%3E">
+  <link rel="preload" href="fonts/InstrumentSerif-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/InstrumentSerif-400i.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/Geist-var.woff2" as="font" type="font/woff2" crossorigin>
+  <script>document.documentElement.classList.add('js');</script>
   <link rel="stylesheet" href="fonts.css">
   <link rel="stylesheet" href="style.css">
   <script type="module" src="app.mjs"></script>
@@ -50,7 +53,7 @@
       <a href="#desk">Desk</a>
       <a href="#chain">What the chain sees</a>
       <a href="#live">Live run</a>
-      <a href="https://github.com/superskie/wakeless" rel="noopener">Source</a>
+      <a class="topnav-source" href="https://github.com/superskie/wakeless" rel="noopener">Source</a>
     </nav>
   </header>
 
@@ -59,7 +62,7 @@
       <canvas id="water" aria-hidden="true"></canvas>
       <div class="hero-copy">
         <p class="eyebrow">NEAR Intents <span>/</span> 1Click <span>/</span> Confidential Intents</p>
-        <h1>Big trades.<br><em>No wake.</em></h1>
+        <h1><span class="line"><span>Big trades.</span></span><span class="line"><span><em>No wake.</em></span></span></h1>
         <p class="lede">Wakeless works a large cross-chain swap in randomized slices through NEAR Intents, so it pays less price impact and leaves no pattern for wallet watchers to trade against.</p>
         <div class="hero-cta">
           <a class="btn primary" href="#desk">Work an order</a>
@@ -71,6 +74,7 @@
       <figure class="impact card" id="impact">
         <figcaption class="impact-head">
           <div>
+            <p class="card-kicker"><span class="live-dot" aria-hidden="true"></span>Live quotes</p>
             <h2>What size costs right now</h2>
             <p>Extra cost against a $1,000 swap, <span id="impact-pair">USDC on Arbitrum to SOL on Solana</span></p>
           </div>
@@ -81,131 +85,167 @@
       </figure>
     </section>
 
-    <section class="desk" id="desk">
-      <form class="ticket card" id="ticket" novalidate>
-        <h2>Work an order</h2>
+    <ul class="proof" aria-label="What has been shown so far">
+      <li><span class="proof-k">Mainnet</span><span class="proof-v" id="proof-live">A live run on NEAR Intents</span></li>
+      <li><span class="proof-k">Public ledger, mid-run</span><span class="proof-v" id="proof-ledger">Nothing between deposit and withdrawal</span></li>
+      <li><span class="proof-k">$500,000, replayed</span><span class="proof-v" id="proof-replay">Two committed runs</span></li>
+    </ul>
 
-        <div class="pair">
-          <label class="field">
-            <span class="field-label">Sell</span>
-            <select id="sell" aria-label="Sell asset"></select>
-          </label>
-          <button type="button" class="flip" id="flip" aria-label="Swap sell and buy">
-            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 4v11m0 0-3-3m3 3 3-3M14 16V5m0 0-3 3m3-3 3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-          <label class="field">
-            <span class="field-label">Buy</span>
-            <select id="buy" aria-label="Buy asset"></select>
-          </label>
-        </div>
+    <section class="desk-section" id="desk">
+      <header class="section-head reveal">
+        <p class="index">01 <span>/</span> Desk</p>
+        <h2>Work an <em>order</em></h2>
+        <p>Pick a pair and a size. The desk quotes it live through 1Click, slices it on a random schedule and reports what the slices got against one swap. Nothing is signed.</p>
+      </header>
 
-        <label class="field">
-          <span class="field-label">Amount</span>
-          <span class="amount-row">
-            <input id="amount" inputmode="decimal" autocomplete="off" value="500000" aria-describedby="amount-usd">
-            <span class="unit" id="amount-unit">USDC</span>
-          </span>
-          <span class="hint" id="amount-usd">about $500,000</span>
-        </label>
-        <div class="chips" id="chips" role="group" aria-label="Order size presets">
-          <button type="button" data-usd="100000">$100k</button>
-          <button type="button" data-usd="250000">$250k</button>
-          <button type="button" data-usd="500000" aria-pressed="true">$500k</button>
-          <button type="button" data-usd="1000000">$1M</button>
-        </div>
+      <div class="desk">
+        <form class="ticket card reveal" id="ticket" novalidate>
+          <h3>Order ticket</h3>
 
-        <div class="two">
-          <label class="field">
-            <span class="field-label">Slices <output id="slices-out">16</output></span>
-            <input type="range" id="slices" min="1" max="64" step="1" value="16">
-          </label>
-          <label class="field">
-            <span class="field-label">Window</span>
-            <select id="window">
-              <option value="10">10 minutes</option>
-              <option value="30" selected>30 minutes</option>
-              <option value="60">1 hour</option>
-              <option value="120">2 hours</option>
-            </select>
-          </label>
-        </div>
-
-        <label class="field">
-          <span class="field-label">Max adverse move <output id="adverse-out">40 bps</output></span>
-          <input type="range" id="adverse" min="10" max="100" step="5" value="40">
-          <span class="hint">A slice fills only if its quote is within this distance of the arrival price.</span>
-        </label>
-
-        <fieldset class="speed">
-          <legend class="field-label">Speed</legend>
-          <label><input type="radio" name="speed" value="30"><span>x30</span></label>
-          <label><input type="radio" name="speed" value="60" checked><span>x60</span></label>
-          <label><input type="radio" name="speed" value="120"><span>x120</span></label>
-        </fieldset>
-
-        <div class="precheck" id="precheck">
-          <button class="btn ghost small" type="button" id="precheck-run">Check this order first</button>
-          <span class="hint">Live quotes at several slice sizes: is slicing worth it right now, and into how many?</span>
-          <div id="precheck-out" aria-live="polite" hidden></div>
-        </div>
-
-        <button class="btn primary big" id="run" type="submit">
-          <span class="spinner" aria-hidden="true"></span>
-          <span class="run-label">Work this order</span>
-        </button>
-        <p class="error" id="ticket-error" role="alert"></p>
-
-        <ol class="next">
-          <li><b>Arrival.</b> Quote one slice and the whole order at once.</li>
-          <li><b>Slices.</b> Each fires at a random moment inside its own slot, at a random size.</li>
-          <li><b>Floor.</b> A slice fills only at or above the floor; otherwise it waits, splits or stays unfilled.</li>
-          <li><b>Report.</b> Compare the slices with doing it in one swap.</li>
-        </ol>
-      </form>
-
-      <section class="monitor card" aria-labelledby="monitor-title">
-        <header class="monitor-head">
-          <h2 id="monitor-title">Execution</h2>
-          <ol class="stepper" id="stepper">
-            <li data-step="arrival">Arrival</li>
-            <li data-step="working">Working</li>
-            <li data-step="report">Report</li>
-          </ol>
-          <span class="clock" id="clock">00:00</span>
-        </header>
-
-        <div class="timeline-wrap">
-          <svg id="timeline" viewBox="0 0 720 230" role="img" aria-label="Slice timeline"></svg>
-          <div class="empty" id="monitor-empty">
-            <p>Pick an order and press <b>Work this order</b>, or replay a committed $500k run.</p>
-            <div class="replay-pair">
-              <button class="btn ghost small" type="button" id="replay" title="5 Nov 2026, a thin market">Replay 5 Nov</button>
-              <button class="btn ghost small" type="button" id="replay-deep" title="7 Nov 2026, a deeper market">Replay 7 Nov</button>
+          <div class="group">
+            <p class="group-label">Pair</p>
+            <div class="pair">
+              <label class="field">
+                <span class="field-label">Sell</span>
+                <select id="sell" aria-label="Sell asset"></select>
+              </label>
+              <button type="button" class="flip" id="flip" aria-label="Swap sell and buy">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 4v11m0 0-3-3m3 3 3-3M14 16V5m0 0-3 3m3-3 3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <label class="field">
+                <span class="field-label">Buy</span>
+                <select id="buy" aria-label="Buy asset"></select>
+              </label>
             </div>
           </div>
-        </div>
-        <ul class="legend" aria-label="Legend">
-          <li><i class="k plan"></i>Planned</li>
-          <li><i class="k fill"></i>Filled</li>
-          <li><i class="k wait"></i>Waited</li>
-          <li><i class="k split"></i>Split</li>
-          <li><i class="k skip"></i>Unfilled</li>
-        </ul>
 
-        <div class="monitor-body">
-          <ol class="tape" id="tape" aria-live="polite"></ol>
-          <div class="result" id="result" hidden></div>
-        </div>
-      </section>
+          <div class="group">
+            <p class="group-label">Size</p>
+            <label class="field">
+              <span class="field-label">Amount</span>
+              <span class="amount-row">
+                <input id="amount" inputmode="decimal" autocomplete="off" value="500000" aria-describedby="amount-usd">
+                <span class="unit" id="amount-unit">USDC</span>
+              </span>
+              <span class="hint" id="amount-usd">about $500,000</span>
+            </label>
+            <div class="chips" id="chips" role="group" aria-label="Order size presets">
+              <button type="button" data-usd="100000">$100k</button>
+              <button type="button" data-usd="250000">$250k</button>
+              <button type="button" data-usd="500000" aria-pressed="true">$500k</button>
+              <button type="button" data-usd="1000000">$1M</button>
+            </div>
+          </div>
+
+          <div class="group">
+            <p class="group-label">Schedule</p>
+            <div class="two">
+              <label class="field">
+                <span class="field-label">Slices <output id="slices-out">16</output></span>
+                <input type="range" id="slices" min="1" max="64" step="1" value="16">
+              </label>
+              <label class="field">
+                <span class="field-label">Window</span>
+                <select id="window">
+                  <option value="10">10 minutes</option>
+                  <option value="30" selected>30 minutes</option>
+                  <option value="60">1 hour</option>
+                  <option value="120">2 hours</option>
+                </select>
+              </label>
+            </div>
+            <label class="field">
+              <span class="field-label">Max adverse move <output id="adverse-out">40 bps</output></span>
+              <input type="range" id="adverse" min="10" max="100" step="5" value="40">
+              <span class="hint">A slice fills only if its quote is within this distance of the arrival price.</span>
+            </label>
+            <fieldset class="speed">
+              <legend class="field-label">Playback</legend>
+              <span class="segmented">
+                <label><input type="radio" name="speed" value="30"><span>x30</span></label>
+                <label><input type="radio" name="speed" value="60" checked><span>x60</span></label>
+                <label><input type="radio" name="speed" value="120"><span>x120</span></label>
+              </span>
+            </fieldset>
+          </div>
+
+          <div class="precheck" id="precheck">
+            <div class="precheck-head">
+              <p class="group-label">Pre-trade check</p>
+              <button class="btn ghost small" type="button" id="precheck-run">Check this order first</button>
+            </div>
+            <span class="hint">Live quotes at several slice sizes: is slicing worth it right now, and into how many?</span>
+            <div id="precheck-out" aria-live="polite" hidden></div>
+          </div>
+
+          <button class="btn primary big" id="run" type="submit">
+            <span class="spinner" aria-hidden="true"></span>
+            <span class="run-label">Work this order</span>
+          </button>
+          <p class="error" id="ticket-error" role="alert"></p>
+
+          <ol class="next">
+            <li><b>Arrival.</b> Quote one slice and the whole order at once.</li>
+            <li><b>Slices.</b> Each fires at a random moment inside its own slot, at a random size.</li>
+            <li><b>Floor.</b> A slice fills only at or above the floor; otherwise it waits, splits or stays unfilled.</li>
+            <li><b>Report.</b> Compare the slices with doing it in one swap.</li>
+          </ol>
+        </form>
+
+        <section class="monitor card reveal" aria-labelledby="monitor-title" style="--d: 90ms">
+          <header class="monitor-head">
+            <h3 id="monitor-title">Execution</h3>
+            <ol class="stepper" id="stepper">
+              <li data-step="arrival">Arrival</li>
+              <li data-step="working">Working</li>
+              <li data-step="report">Report</li>
+            </ol>
+            <span class="clock" id="clock">00:00</span>
+          </header>
+
+          <div class="timeline-wrap">
+            <svg id="timeline" viewBox="0 0 720 230" role="img" aria-label="Slice timeline"></svg>
+            <div class="empty" id="monitor-empty">
+              <p class="empty-title">Nothing is working yet.</p>
+              <p>Set an order and press <b>Work this order</b>, or replay one of the two committed $500,000 runs, USDC on Arbitrum to SOL.</p>
+              <div class="replay-pair">
+                <button class="replay-card" type="button" id="replay" title="5 Nov 2026, a thin market">
+                  <span class="rc-date">5 Nov 2026</span>
+                  <span class="rc-what">Thin market</span>
+                  <span class="rc-val" data-run="replay">Replay</span>
+                </button>
+                <button class="replay-card" type="button" id="replay-deep" title="7 Nov 2026, a deeper market">
+                  <span class="rc-date">7 Nov 2026</span>
+                  <span class="rc-what">Deeper market</span>
+                  <span class="rc-val" data-run="replay-deep">Replay</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <ul class="legend" aria-label="Legend">
+            <li><i class="k plan"></i>Planned</li>
+            <li><i class="k fill"></i>Filled</li>
+            <li><i class="k wait"></i>Waited</li>
+            <li><i class="k split"></i>Split</li>
+            <li><i class="k skip"></i>Unfilled</li>
+          </ul>
+
+          <div class="monitor-body">
+            <ol class="tape" id="tape" aria-live="polite"></ol>
+            <div class="result" id="result" hidden></div>
+          </div>
+        </section>
+      </div>
     </section>
 
     <section class="chain" id="chain">
-      <div class="section-head">
-        <h2>What the chain sees</h2>
+      <header class="section-head reveal">
+        <p class="index">02 <span>/</span> Privacy</p>
+        <h2>What the chain <em>sees</em></h2>
         <p>The same order, worked two ways. <span id="chain-order">500,000 USDC to SOL in 16 slices over 30 minutes.</span></p>
-      </div>
+      </header>
       <div class="compare">
-        <article class="card exposed">
+        <article class="card exposed reveal">
           <header>
             <h3>A TWAP from one wallet</h3>
             <span class="badge exposed">Public</span>
@@ -213,7 +253,7 @@
           <ol class="ledger" id="ledger-public"></ol>
           <p class="note">Same address, same size, fixed rhythm. After two fills, anyone can estimate what is left and trade ahead of it.</p>
         </article>
-        <article class="card quiet">
+        <article class="card quiet reveal" style="--d: 90ms">
           <header>
             <h3>Wakeless, live mode</h3>
             <a class="badge quiet" href="#live">Ran on mainnet</a>
@@ -223,7 +263,7 @@
         </article>
       </div>
 
-      <div class="privacy card" id="privacy">
+      <div class="privacy card reveal" id="privacy">
         <div class="privacy-copy">
           <h3>Privacy has no measured price premium</h3>
           <p>Confidential and public quotes for the same order at the same moment, USDC on Arbitrum to SOL on Solana. Taken with a partner key, which never reaches this page, so the table is a committed snapshot.</p>
@@ -237,11 +277,12 @@
     </section>
 
     <section class="live" id="live">
-      <div class="section-head">
+      <header class="section-head reveal">
+        <p class="index">03 <span>/</span> Proof</p>
         <h2>Live on <em>mainnet</em></h2>
         <p id="live-summary">Loading the committed live run.</p>
-      </div>
-      <div class="live-grid card">
+      </header>
+      <div class="live-grid card reveal">
         <div class="live-path">
           <h3>What the public saw</h3>
           <ol class="ledger" id="live-ledger"></ol>
@@ -262,8 +303,14 @@
   </main>
 
   <footer class="foot">
-    <p><span class="wordmark small">Wakeless</span> Built at NEAR HACKATHON, November 2026. MIT license.</p>
-    <p>Quotes come from the public 1Click API of NEAR Intents. Nothing on this page signs a transaction or moves funds.</p>
+    <div class="foot-sign">
+      <p class="foot-mark">Wakeless</p>
+      <p class="foot-line">Big trades. <em>No wake.</em></p>
+    </div>
+    <div class="foot-meta">
+      <p>Built at NEAR HACKATHON, November 2026. MIT license.</p>
+      <p>Quotes come from the public 1Click API of NEAR Intents. Nothing on this page signs a transaction or moves funds.</p>
+    </div>
   </footer>
 </body>
 </html>
