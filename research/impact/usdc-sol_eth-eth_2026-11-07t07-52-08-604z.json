@@ -1,0 +1,248 @@
+{
+ "takenAt": "2026-11-07T07:52:05.863Z",
+ "sell": {
+  "ref": "usdc:sol",
+  "assetId": "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near",
+  "symbol": "USDC",
+  "blockchain": "sol",
+  "decimals": 6,
+  "price": 0.999704,
+  "priceUpdatedAt": "2026-11-07T07:51:30.685Z"
+ },
+ "buy": {
+  "ref": "eth:eth",
+  "assetId": "nep141:eth.omft.near",
+  "symbol": "ETH",
+  "blockchain": "eth",
+  "decimals": 18,
+  "price": 2242.87,
+  "priceUpdatedAt": "2026-11-07T07:51:30.685Z"
+ },
+ "rows": [
+  {
+   "usd": 1000,
+   "request": {
+    "dry": true,
+    "swapType": "EXACT_INPUT",
+    "slippageTolerance": 100,
+    "originAsset": "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near",
+    "depositType": "INTENTS",
+    "destinationAsset": "nep141:eth.omft.near",
+    "amount": "1000296088",
+    "refundTo": "dry-run.wakeless.near",
+    "refundType": "INTENTS",
+    "recipient": "dry-run.wakeless.near",
+    "recipientType": "INTENTS",
+    "deadline": "2026-11-07T08:22:05.866Z"
+   },
+   "status": 201,
+   "latencyMs": 706,
+   "response": {
+    "quote": {
+     "amountIn": "1000296088",
+     "amountInFormatted": "1000.296088",
+     "amountInUsd": "1000.000000357952",
+     "minAmountIn": "1000296088",
+     "amountOut": "444977472523942483",
+     "amountOutFormatted": "0.444977472523942483",
+     "amountOutUsd": "998.026623799775",
+     "minAmountOut": "440527697798703058",
+     "timeEstimate": 10,
+     "refundFee": "0",
+     "withdrawFee": "0"
+    },
+    "quoteRequest": {
+     "dry": true,
+     "depositMode": "SIMPLE",
+     "swapType": "EXACT_INPUT",
+     "slippageTolerance": 100,
+     "originAsset": "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near",
+     "depositType": "INTENTS",
+     "destinationAsset": "nep141:eth.omft.near",
+     "amount": "1000296088",
+     "refundTo": "dry-run.wakeless.near",
+     "refundType": "INTENTS",
+     "recipient": "dry-run.wakeless.near",
+     "recipientType": "INTENTS",
+     "deadline": "2026-11-07T08:22:05.866Z",
+     "confidentiality": "public",
+     "quoteWaitingTimeMs": 0,
+     "insured": false,
+     "appFees": [
+      {
+       "recipient": "5880ad2b362620fadf759cbceb1cd5737ce8c6ed7fb8e9942881e6731f9247dd",
+       "fee": 20
+      }
+     ]
+    },
+    "signature": "ed25519:5V151Ppa2jefydrDxgqUGcrYCrQSmeU6BDt7cFRzCFf5auvntAzcWbBeAfR2f5TPZnBzQ9HAu3ECrreKy1cN8Tcn",
+    "timestamp": "2026-11-07T07:52:05.939Z",
+    "correlationId": "2b6304b2-f1c9-45f1-b235-81e60c9dd30a"
+   },
+   "q": {
+    "ok": true,
+    "amountIn": "1000296088",
+    "amountOut": "444977472523942483",
+    "rate": 0.0004448457590328419,
+    "inUsd": 1000.000000357952,
+    "outUsd": 998.026623799775,
+    "costBps": 19.73376557470541,
+    "midRate": 0.0004457253429757408,
+    "minAmountOut": "440527697798703058",
+    "timeEstimate": 10,
+    "latencyMs": 706,
+    "warnings": []
+   }
+  },
+  {
+   "usd": 1000000,
+   "request": {
+    "dry": true,
+    "swapType": "EXACT_INPUT",
+    "slippageTolerance": 100,
+    "originAsset": "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near",
+    "depositType": "INTENTS",
+    "destinationAsset": "nep141:eth.omft.near",
+    "amount": "1000296087642",
+    "refundTo": "dry-run.wakeless.near",
+    "refundType": "INTENTS",
+    "recipient": "dry-run.wakeless.near",
+    "recipientType": "INTENTS",
+    "deadline": "2026-11-07T08:22:06.586Z"
+   },
+   "status": 201,
+   "latencyMs": 1037,
+   "response": {
+    "quote": {
+     "amountIn": "1000296087642",
+     "amountInFormatted": "1000296.087642",
+     "amountInUsd": "1000000.000000058091",
+     "minAmountIn": "1000296087642",
+     "amountOut": "444172524371509401418",
+     "amountOutFormatted": "444.172524371509401418",
+     "amountOutUsd": "996221.229737127200",
+     "minAmountOut": "439730799127794307403",
+     "timeEstimate": 10,
+     "refundFee": "0",
+     "withdrawFee": "0"
+    },
+    "quoteRequest": {
+     "dry": true,
+     "depositMode": "SIMPLE",
+     "swapType": "EXACT_INPUT",
+     "slippageTolerance": 100,
+     "originAsset": "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near",
+     "depositType": "INTENTS",
+     "destinationAsset": "nep141:eth.omft.near",
+     "amount": "1000296087642",
+     "refundTo": "dry-run.wakeless.near",
+     "refundType": "INTENTS",
+     "recipient": "dry-run.wakeless.near",
+     "recipientType": "INTENTS",
+     "deadline": "2026-11-07T08:22:06.586Z",
+     "confidentiality": "public",
+     "quoteWaitingTimeMs": 0,
+     "insured": false,
+     "appFees": [
+      {
+       "recipient": "5880ad2b362620fadf759cbceb1cd5737ce8c6ed7fb8e9942881e6731f9247dd",
+       "fee": 20
+      }
+     ]
+    },
+    "signature": "ed25519:23J4RP5swDtZBLUGdejDdvxv8C76FR9EL46xTDcyRVib8UxxaBkkNMA9mQzePvmDP7jmVdiU9FDayL6yJRd1jpka",
+    "timestamp": "2026-11-07T07:52:06.706Z",
+    "correlationId": "103bde38-699e-46cf-ace7-01264a68ed40"
+   },
+   "q": {
+    "ok": true,
+    "amountIn": "1000296087642",
+    "amountOut": "444172524371509401418",
+    "rate": 0.00044404104930426965,
+    "inUsd": 1000000.0000000581,
+    "outUsd": 996221.2297371272,
+    "costBps": 37.7877026293072,
+    "midRate": 0.00044572534297574097,
+    "minAmountOut": "439730799127794307403",
+    "timeEstimate": 10,
+    "latencyMs": 1037,
+    "warnings": []
+   }
+  },
+  {
+   "usd": 2000000,
+   "request": {
+    "dry": true,
+    "swapType": "EXACT_INPUT",
+    "slippageTolerance": 100,
+    "originAsset": "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near",
+    "depositType": "INTENTS",
+    "destinationAsset": "nep141:eth.omft.near",
+    "amount": "2000592175284",
+    "refundTo": "dry-run.wakeless.near",
+    "refundType": "INTENTS",
+    "recipient": "dry-run.wakeless.near",
+    "recipientType": "INTENTS",
+    "deadline": "2026-11-07T08:22:07.623Z"
+   },
+   "status": 201,
+   "latencyMs": 980,
+   "response": {
+    "quote": {
+     "amountIn": "2000592175284",
+     "amountInFormatted": "2000592.175284",
+     "amountInUsd": "2000000.000000116182",
+     "minAmountIn": "2000592175284",
+     "amountOut": "886338465286130739433",
+     "amountOutFormatted": "886.338465286130739433",
+     "amountOutUsd": "1987941.953636304010",
+     "minAmountOut": "877475080633269432038",
+     "timeEstimate": 10,
+     "refundFee": "0",
+     "withdrawFee": "0"
+    },
+    "quoteRequest": {
+     "dry": true,
+     "depositMode": "SIMPLE",
+     "swapType": "EXACT_INPUT",
+     "slippageTolerance": 100,
+     "originAsset": "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near",
+     "depositType": "INTENTS",
+     "destinationAsset": "nep141:eth.omft.near",
+     "amount": "2000592175284",
+     "refundTo": "dry-run.wakeless.near",
+     "refundType": "INTENTS",
+     "recipient": "dry-run.wakeless.near",
+     "recipientType": "INTENTS",
+     "deadline": "2026-11-07T08:22:07.623Z",
+     "confidentiality": "public",
+     "quoteWaitingTimeMs": 0,
+     "insured": false,
+     "appFees": [
+      {
+       "recipient": "5880ad2b362620fadf759cbceb1cd5737ce8c6ed7fb8e9942881e6731f9247dd",
+       "fee": 20
+      }
+     ]
+    },
+    "signature": "ed25519:65UMdjxJnr1AwRJGhhzpcFcCdDVWkpKB2SJxwAU6xK7CiLPSQWjKDfrsGVmxBcp5VVF6jqh7crByy16PwXMC99JW",
+    "timestamp": "2026-11-07T07:52:07.677Z",
+    "correlationId": "b91621ba-3f8b-4331-9266-ca0a3f7eecc2"
+   },
+   "q": {
+    "ok": true,
+    "amountIn": "2000592175284",
+    "amountOut": "886338465286130739433",
+    "rate": 0.0004430380545501773,
+    "inUsd": 2000000.0000001162,
+    "outUsd": 1987941.953636304,
+    "costBps": 60.29023181905791,
+    "midRate": 0.0004457253429757409,
+    "minAmountOut": "877475080633269432038",
+    "timeEstimate": 10,
+    "latencyMs": 980,
+    "warnings": []
+   }
+  }
+ ]
+}

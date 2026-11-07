@@ -1,0 +1,162 @@
+{
+ "takenAt": "2026-11-07T07:51:57.003Z",
+ "sell": {
+  "ref": "eth:eth",
+  "assetId": "nep141:eth.omft.near",
+  "symbol": "ETH",
+  "blockchain": "eth",
+  "decimals": 18,
+  "price": 2242.87,
+  "priceUpdatedAt": "2026-11-07T07:51:00.922Z"
+ },
+ "buy": {
+  "ref": "sol:sol",
+  "assetId": "nep141:sol.omft.near",
+  "symbol": "SOL",
+  "blockchain": "sol",
+  "decimals": 9,
+  "price": 90.11,
+  "priceUpdatedAt": "2026-11-07T07:51:00.922Z"
+ },
+ "rows": [
+  {
+   "usd": 1000,
+   "request": {
+    "dry": true,
+    "swapType": "EXACT_INPUT",
+    "slippageTolerance": 100,
+    "originAsset": "nep141:eth.omft.near",
+    "depositType": "INTENTS",
+    "destinationAsset": "nep141:sol.omft.near",
+    "amount": "445857316741496448",
+    "refundTo": "dry-run.wakeless.near",
+    "refundType": "INTENTS",
+    "recipient": "dry-run.wakeless.near",
+    "recipientType": "INTENTS",
+    "deadline": "2026-11-07T08:21:57.004Z"
+   },
+   "status": 201,
+   "latencyMs": 683,
+   "response": {
+    "quote": {
+     "amountIn": "445857316741496448",
+     "amountInFormatted": "0.445857316741496448",
+     "amountInUsd": "1000.000000000000",
+     "minAmountIn": "445857316741496448",
+     "amountOut": "11078041379",
+     "amountOutFormatted": "11.078041379",
+     "amountOutUsd": "998.242308661690",
+     "minAmountOut": "10967260965",
+     "timeEstimate": 10,
+     "refundFee": "0",
+     "withdrawFee": "0"
+    },
+    "quoteRequest": {
+     "dry": true,
+     "depositMode": "SIMPLE",
+     "swapType": "EXACT_INPUT",
+     "slippageTolerance": 100,
+     "originAsset": "nep141:eth.omft.near",
+     "depositType": "INTENTS",
+     "destinationAsset": "nep141:sol.omft.near",
+     "amount": "445857316741496448",
+     "refundTo": "dry-run.wakeless.near",
+     "refundType": "INTENTS",
+     "recipient": "dry-run.wakeless.near",
+     "recipientType": "INTENTS",
+     "deadline": "2026-11-07T08:21:57.004Z",
+     "confidentiality": "public",
+     "quoteWaitingTimeMs": 0,
+     "insured": false,
+     "appFees": [
+      {
+       "recipient": "5880ad2b362620fadf759cbceb1cd5737ce8c6ed7fb8e9942881e6731f9247dd",
+       "fee": 20
+      }
+     ]
+    },
+    "signature": "ed25519:2i86aWT7Rs8pS5P4uJxrBLTnSUaiUjK4XAKX2qedvhYtbvf4TpZNVnnDr9KVMdrpgikbhFxfUPaJyS1mMTehjhfb",
+    "timestamp": "2026-11-07T07:51:57.057Z",
+    "correlationId": "85c40efb-1105-4b19-8011-9a89ae04bcc9"
+   },
+   "q": {
+    "ok": true,
+    "amountIn": "445857316741496448",
+    "amountOut": "11078041379",
+    "rate": 24.84660666771773,
+    "inUsd": 1000,
+    "outUsd": 998.24230866169,
+    "costBps": 17.576913383099413,
+    "midRate": 24.890356231272886,
+    "minAmountOut": "10967260965",
+    "timeEstimate": 10,
+    "latencyMs": 683,
+    "warnings": []
+   }
+  },
+  {
+   "usd": 1000000,
+   "request": {
+    "dry": true,
+    "swapType": "EXACT_INPUT",
+    "slippageTolerance": 100,
+    "originAsset": "nep141:eth.omft.near",
+    "depositType": "INTENTS",
+    "destinationAsset": "nep141:sol.omft.near",
+    "amount": "445857316741496373248",
+    "refundTo": "dry-run.wakeless.near",
+    "refundType": "INTENTS",
+    "recipient": "dry-run.wakeless.near",
+    "recipientType": "INTENTS",
+    "deadline": "2026-11-07T08:21:57.705Z"
+   },
+   "status": 400,
+   "latencyMs": 3430,
+   "response": {
+    "message": "No liquidity available",
+    "correlationId": "0265bc2e-ed1c-43c2-b54c-d41ccdf8b4fa",
+    "timestamp": "2026-11-07T07:52:00.826Z",
+    "path": "/v0/quote"
+   },
+   "q": {
+    "ok": false,
+    "status": 400,
+    "message": "No liquidity available",
+    "noLiquidity": true,
+    "latencyMs": 3430
+   }
+  },
+  {
+   "usd": 2000000,
+   "request": {
+    "dry": true,
+    "swapType": "EXACT_INPUT",
+    "slippageTolerance": 100,
+    "originAsset": "nep141:eth.omft.near",
+    "depositType": "INTENTS",
+    "destinationAsset": "nep141:sol.omft.near",
+    "amount": "891714633482992746496",
+    "refundTo": "dry-run.wakeless.near",
+    "refundType": "INTENTS",
+    "recipient": "dry-run.wakeless.near",
+    "recipientType": "INTENTS",
+    "deadline": "2026-11-07T08:22:01.136Z"
+   },
+   "status": 400,
+   "latencyMs": 3421,
+   "response": {
+    "message": "No liquidity available",
+    "correlationId": "78788bb5-bb67-427c-b565-7eeb76e1897d",
+    "timestamp": "2026-11-07T07:52:04.234Z",
+    "path": "/v0/quote"
+   },
+   "q": {
+    "ok": false,
+    "status": 400,
+    "message": "No liquidity available",
+    "noLiquidity": true,
+    "latencyMs": 3421
+   }
+  }
+ ]
+}

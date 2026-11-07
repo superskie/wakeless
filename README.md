@@ -9,20 +9,33 @@ Built at NEAR HACKATHON (1 to 14 November 2026). Tracks: Unstoppable DeFi
 
 ## The problem
 
-One large swap pays for its own size. On 5 November 2026 at 02:30 UTC, the
-NEAR Intents 1Click API quoted USDC on Arbitrum to SOL on Solana like this
-([raw quotes](research/impact/usdc-arb_sol-sol_2026-11-05t02-30-14-324z.json)):
+One large swap pays for its own size. Extra cost of one swap against a $1,000
+swap of the same pair, both quoted by the NEAR Intents 1Click API at the same
+moment ([raw quotes](research/impact/), one file per pair and time):
 
-| Order size | Extra cost against a $1,000 swap |
-| ---: | ---: |
-| $10,000 | about 0 bps |
-| $100,000 | +8.9 bps |
-| $500,000 | +24.5 bps |
-| $1,000,000 | no quote: "No liquidity available" |
+| Pair | Taken (UTC) | $100,000 | $500,000 | $1,000,000 |
+| --- | --- | ---: | ---: | ---: |
+| USDC (Arbitrum) to SOL | 5 Nov 2026, 02:30 | +8.9 bps | +24.5 bps | no quote |
+| USDC (Arbitrum) to SOL | 7 Nov 2026, 07:51 | +5.7 bps | +8.7 bps | no quote |
+| ETH (Ethereum) to SOL | 7 Nov 2026, 07:51 | +9.4 bps | +13.0 bps | no quote |
+| USDC (Solana) to ETH (Ethereum) | 7 Nov 2026, 07:51 | +4.1 bps | +7.3 bps | +18.1 bps |
 
-Trading desks split such orders over time (TWAP). Done from a normal wallet,
-every slice is a public transaction from the same address at a regular size
-and rhythm, which tells observers how much is still coming.
+"No quote" is 1Click answering "No liquidity available": above what the
+solvers fill at once, one swap does not happen at all. The penalty moves with
+the day's liquidity. The same pair cost 24.5 bps extra at $500,000 on
+5 November and 8.7 bps two days later.
+
+Trading desks split such orders over time (TWAP). Done in public, the schedule
+itself leaks. On Hyperliquid a TWAP is an on-chain action that carries the
+wallet, market, side, total size and duration. On 7 November 2026 at 08:28 UTC
+a public tracker listed 416 running TWAPs with about $40M ordered, including
+ones flagged as randomized ([vike.io](https://vike.io/hyperliquid/twaps)), and
+an open-source library reports each slice of a tracked TWAP within about half
+a second
+([hyperliquid-twap-watcher](https://github.com/LoveBloodAndDiamonds/hyperliquid-twap-watcher)).
+Random slice sizes do not hide an order whose total is public. From a normal
+wallet on any chain, every slice is a public transaction from the same
+address, which tells observers how much is still coming.
 
 ## What it does
 
@@ -72,6 +85,14 @@ the committed journal of a run on 5 November 2026: the 16 slices received
 $1,150. The run was compressed, so the market had little time to move, and at
 arrival a slice-sized quote already cost 22.6 bps less than the one-swap quote
 taken at the same moment.
+
+**Do** `node bin/wakeless.mjs report examples/sample-run-2026-11-07.jsonl`.
+**See** the same order run again on 7 November 2026, when the pair was deeper:
++4.5 bps more SOL than one swap, about $224. At arrival the slice-sized quote
+cost 7.0 bps less than the one-swap quote, and later slices were quoted
+worse rates than the first (20.7 bps rising to 25.0 bps). The saving is the
+size penalty the slices avoid, so it follows the day's liquidity, and
+`npm run demo` will print its own number for the market you run it in.
 
 **Do** `npm run web` and open `http://localhost:8787/web/`. **See** the web
 desk: a live price-impact chart for the order size, a ticket that works an
@@ -124,6 +145,9 @@ only numbers taken at the same moment are compared.
   ([raw quotes](research/confidential/usdc-arb_sol-sol_2026-11-05t03-37-19-519z.json)).
 - Live mode runs on the NEAR Intents Agent API: an agent account whose
   owner-signed policy lets it swap and pay the owner's wallet, nothing else.
+  The Agent API enforces that policy, not Wakeless. Wakeless adds the floor
+  as each swap's minimum output and the rules that stop the desk (see
+  [Working an order through the agent](#working-an-order-through-the-agent)).
   The desk sends every swap in confidential form. In the live run below, four
   slices settled while the public `intents.near` ledger showed a zero balance
   for the agent.
@@ -294,7 +318,8 @@ combined across chains on NEAR Intents.
 
 - Public TWAP: CoW Swap TWAP orders, Jupiter Recurring on Solana and
   Hyperliquid's native TWAP split an order over time inside their own venue,
-  and every child order is public.
+  and every child order is public. On Hyperliquid the parent order is public
+  too, and trackers list it live (see [The problem](#the-problem)).
 - Private TWAP: [`Sednaoui/private-twap`](https://github.com/Sednaoui/private-twap)
   (2021) prototyped TWAP swaps through Aztec Connect on Ethereum.
   [Meridian](https://ethglobal.com/showcase/meridian-1x2ef) (ETHGlobal) is a
