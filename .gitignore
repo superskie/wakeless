@@ -6,3 +6,4 @@ site/
 !.env.example
 *.log
 .DS_Store
+CLAUDE.md
