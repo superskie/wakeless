@@ -184,7 +184,7 @@ export function createLive({ ticket, contractOf, lockTicket, workOrder }) {
         : 'Getting a deposit address.';
       $('#live-deposit').textContent = dep?.address ?? '';
       $('#live-copy').disabled = !dep;
-      const canSend = dep && mem.account && isEvmChain(sell.blockchain) && EVM_CHAIN[sell.blockchain];
+      const canSend = dep && mem.account && isEvmChain(sell.blockchain) && EVM_CHAIN[sell.blockchain] && contractOf(sell.assetId) !== undefined;
       $('#live-send-wallet').hidden = !canSend;
       $('#live-send-wallet').disabled = mem.busy;
       $('#live-balance').textContent = balanceLine(o);

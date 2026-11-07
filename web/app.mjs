@@ -841,7 +841,11 @@ function startMotion() {
 async function init() {
   liveDesk = createLive({
     ticket: currentSpec,
-    contractOf: (assetId) => state.tokens?.find((t) => t.assetId === assetId)?.contractAddress ?? null,
+    // null: a native coin; undefined: not in the 1Click list, so the page will not send it.
+    contractOf: (assetId) => {
+      const token = state.tokens?.find((t) => t.assetId === assetId);
+      return token ? token.contractAddress ?? null : undefined;
+    },
     lockTicket,
     workOrder,
   });
