@@ -455,17 +455,29 @@ input[type="range"]:hover::-webkit-slider-thumb, input[type="range"]:focus-visib
   min-height: 150px;
   align-content: center;
   text-align: center;
+  isolation: isolate;
   color: var(--ink-2);
-  background:
-    radial-gradient(closest-side, rgba(9, 13, 17, 0.92) 55%, rgba(9, 13, 17, 0) 100%) center / 86% 120% no-repeat,
-    repeating-linear-gradient(180deg, transparent 0 6px, rgba(94, 224, 193, 0.05) 6px 30px, transparent 30px 36px) 12px 0 / calc(100% - 24px) 100% no-repeat,
-    rgba(0, 0, 0, 0.26);
+  background: rgba(0, 0, 0, 0.26);
   border-color: rgba(94, 224, 193, 0.28);
 }
+/* Empty ledger rows behind the sealed block, faded out where the text sits. */
+.ledger li.sealed::before {
+  content: "";
+  position: absolute;
+  inset: 10px 12px;
+  z-index: -1;
+  border-radius: 6px;
+  background: repeating-linear-gradient(180deg, rgba(94, 224, 193, 0.06) 0 22px, transparent 22px 30px);
+  -webkit-mask-image: radial-gradient(ellipse 72% 78% at 50% 50%, transparent 50%, #000 100%);
+  mask-image: radial-gradient(ellipse 72% 78% at 50% 50%, transparent 50%, #000 100%);
+  pointer-events: none;
+}
+.live .ledger li.sealed::before { display: none; }
 .ledger li.sealed::after {
   content: "";
   position: absolute;
   inset: 0;
+  z-index: -1;
   background: linear-gradient(100deg, transparent 30%, rgba(184, 247, 230, 0.07) 50%, transparent 70%);
   transform: translateX(-100%);
   animation: sweep 6s var(--ease) infinite;
