@@ -502,6 +502,7 @@ the deposit address, and later the way out to the owner's wallet.
 | `live/exit-check.mjs` | What a withdrawal address would link the order to, read from a public RPC |
 | `examples/` | Example orders, committed dry runs, an agent preview run, the live run, the cap check and the frozen run |
 | `research/impact/` | Raw price impact snapshots |
+| `brand/` | Logo files and `build.mjs`, which outlines them from Instrument Serif and writes the site's favicon and header mark; see `brand/BRAND.md` |
 
 ## Related work
 

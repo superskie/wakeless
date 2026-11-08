@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// Static server for the web desk. Serves only web/, src/, examples/ and
-// research/, never dotfiles, so .env can not leak. No dependencies.
+// Static server for the web desk. Serves only web/, src/, examples/,
+// research/ and brand/ (the logo boards), never dotfiles, so .env can not
+// leak. No dependencies.
 // /api/agent/* runs the same Agent API proxy as the hosted site's Pages
 // Function, with the partner key read from .env on this machine.
 import http from 'node:http';
@@ -15,7 +16,7 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const rootAt = process.argv.indexOf('--root');
 const ROOT = rootAt >= 0 ? path.resolve(REPO, process.argv[rootAt + 1]) : REPO;
 const PORT = Number(process.env.PORT) || 8787;
-const ALLOWED = new Set(['web', 'src', 'examples', 'research']);
+const ALLOWED = new Set(['web', 'src', 'examples', 'research', 'brand']);
 const TYPES = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -27,6 +28,7 @@ const TYPES = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
 };
 

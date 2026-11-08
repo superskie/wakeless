@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wakeless logo v1: exploration</title>
+<!-- Open through the dev server (npm run web): /brand/logo-v1.html -->
+<link rel="stylesheet" href="/web/fonts.css">
+<style>
+  :root { --bg: #07090c; --panel: #0c1117; --line: rgba(226, 236, 245, 0.13); --ink: #edf2f7; --muted: #7b8795; --mint: #5ee0c1; --paper: #f3f5f7; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px; width: 1240px; background: var(--bg); color: var(--ink); font: 400 14px/1.5 "Geist", system-ui, sans-serif; }
+  h1 { font: 400 30px/1 "Instrument Serif", serif; margin: 0 0 18px; }
+  .row { display: grid; grid-template-columns: 150px 1fr; gap: 20px; align-items: center; padding: 16px; border: 1px solid var(--line); background: var(--panel); border-radius: 12px; margin-bottom: 12px; }
+  .row h2 { margin: 0 0 2px; font-size: 14px; font-weight: 600; }
+  .row p { margin: 0; color: var(--muted); max-width: 72ch; font-size: 13px; }
+  .sizes { display: flex; align-items: center; gap: 14px; margin-top: 12px; flex-wrap: wrap; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 5px; border-radius: 999px; background: #161d25; font-size: 13px; }
+  .chip.light { background: var(--paper); color: #0b0f14; }
+  .on-light { background: var(--paper); border-radius: 10px; padding: 6px; display: inline-flex; --mint: #1f9c82; --ink: #0b0f14; }
+  .lockup { display: inline-flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; background: #0a0d11; border: 1px solid var(--line); }
+  .lockup span { font: 400 27px/1 "Instrument Serif", serif; letter-spacing: -0.01em; }
+  .pix { display: inline-flex; gap: 8px; align-items: center; padding: 4px; background: var(--bg); }
+  .m { fill: var(--mint); }
+  .i { fill: var(--ink); }
+  .ms { stroke: var(--mint); fill: none; }
+  .is { stroke: var(--ink); fill: none; }
+  .tile-bg { fill: #0d1318; stroke: rgba(226, 236, 245, 0.13); }
+  .disc-bg { fill: #0d1318; }
+  .w { font-family: "Instrument Serif", serif; font-style: italic; }
+</style>
+</head>
+<body>
+<h1>Wakeless logo v1: exploration</h1>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="tile" viewBox="0 0 64 64"><rect class="tile-bg" x="0.5" y="0.5" width="63" height="63" rx="14.5"/></symbol>
+    <symbol id="disc" viewBox="0 0 64 64"><circle class="disc-bg" cx="32" cy="32" r="32"/></symbol>
+
+    <!-- c1. Italic w (the headline's "wake") on still water, reflected. -->
+    <symbol id="c1" viewBox="0 0 64 64">
+      <text class="m w" x="32" y="37" text-anchor="middle" font-size="54">w</text>
+      <rect class="i" x="9" y="38.4" width="46" height="1.6" rx="0.8" opacity="0.55"/>
+      <text class="m w" x="32" y="37" text-anchor="middle" font-size="54" opacity="0.2" transform="translate(0 78.4) scale(1 -1)">w</text>
+    </symbol>
+
+    <!-- c2. The order as a coin, cut into four slices of random width. -->
+    <mask id="c2m" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <circle cx="32" cy="32" r="21" fill="#fff"/>
+      <rect x="19.4" y="0" width="2.6" height="64" fill="#000"/>
+      <rect x="27.9" y="0" width="2.6" height="64" fill="#000"/>
+      <rect x="40.4" y="0" width="2.6" height="64" fill="#000"/>
+    </mask>
+    <symbol id="c2" viewBox="0 0 64 64"><rect class="m" width="64" height="64" mask="url(#c2m)"/></symbol>
+
+    <!-- c3. An arch of five stones over still water; the reflection closes the circle. -->
+    <symbol id="c3" viewBox="0 0 64 64"><g id="c3g"></g></symbol>
+
+    <!-- c5. A W (two wakes) cut into four separate strokes. -->
+    <symbol id="c5" viewBox="0 0 64 64"><g id="c5g"></g></symbol>
+
+    <!-- c6. A hull built from slices, under a flat surface. -->
+    <symbol id="c6" viewBox="0 0 64 64"><g id="c6g"></g></symbol>
+
+    <!-- c7. A whale's tail going under without a splash. -->
+    <symbol id="c7" viewBox="0 0 64 64">
+      <path class="m" d="M28.6 49.5C29 45 29.6 41.5 30.4 38.5C27.5 37.2 18 33.6 9 21.5C17 22.2 26.3 25.4 32 30.2C37.7 25.4 47 22.2 55 21.5C46 33.6 36.5 37.2 33.6 38.5C34.4 41.5 35 45 35.4 49.5Z"/>
+      <rect class="i" x="8" y="49" width="48" height="2" rx="1" opacity="0.55"/>
+    </symbol>
+
+    <!-- c8. The current mark, for comparison. -->
+    <symbol id="c8" viewBox="0 0 64 64">
+      <rect class="m" x="14" y="18" width="6" height="22" rx="3"/>
+      <rect class="m" x="29" y="26" width="6" height="14" rx="3"/>
+      <rect class="m" x="44" y="14" width="6" height="26" rx="3"/>
+      <rect class="i" x="12" y="48" width="40" height="4" rx="2" opacity="0.55"/>
+    </symbol>
+
+    <!-- c9. Three slices on still water with clean reflections. -->
+    <symbol id="c9" viewBox="0 0 64 64">
+      <rect class="m" x="16" y="19" width="6" height="14" rx="3"/>
+      <rect class="m" x="29" y="24" width="6" height="9" rx="3"/>
+      <rect class="m" x="42" y="15" width="6" height="18" rx="3"/>
+      <rect class="i" x="9" y="34.2" width="46" height="1.6" rx="0.8" opacity="0.55"/>
+      <g opacity="0.2">
+        <rect class="m" x="16" y="37" width="6" height="14" rx="3"/>
+        <rect class="m" x="29" y="37" width="6" height="9" rx="3"/>
+        <rect class="m" x="42" y="37" width="6" height="18" rx="3"/>
+      </g>
+    </symbol>
+
+    <!-- c13. A porthole: a calm horizon with one slice on it. -->
+    <symbol id="c13" viewBox="0 0 64 64">
+      <circle class="is" cx="32" cy="32" r="21.5" stroke-width="3" opacity="0.55"/>
+      <rect class="i" x="11.5" y="34.4" width="41" height="1.6" rx="0.8" opacity="0.55"/>
+      <rect class="m" x="35" y="21" width="5" height="12" rx="2.5"/>
+      <rect class="m" x="35" y="37.4" width="5" height="9" rx="2.5" opacity="0.22"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div id="rows"></div>
+
+<script>
+  const NS = 'http://www.w3.org/2000/svg';
+  const f = (n) => Number(n.toFixed(2));
+  const el = (tag, attrs) => {
+    const e = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    return e;
+  };
+
+  // Annular sector between angles a0 and a1 (math orientation, y up), with a straight gap of g
+  // at each inner edge; edges flagged false stay flush (where the arch meets the water).
+  function sector(cx, cy, R, r, a0, a1, g, gap0 = true, gap1 = true) {
+    const dR = Math.asin(g / 2 / R), dr = Math.asin(g / 2 / r);
+    const p = (a, rad) => `${f(cx + rad * Math.cos(a))} ${f(cy - rad * Math.sin(a))}`;
+    const o0 = a0 + (gap0 ? dR : 0), o1 = a1 - (gap1 ? dR : 0);
+    const i0 = a0 + (gap0 ? dr : 0), i1 = a1 - (gap1 ? dr : 0);
+    return `M${p(o0, R)}A${R} ${R} 0 0 0 ${p(o1, R)}L${p(i1, r)}A${r} ${r} 0 0 1 ${p(i0, r)}Z`;
+  }
+
+  // c3: five voussoirs, waterline, reflection.
+  {
+    const g = document.querySelector('#c3g');
+    const cx = 32, cy = 37, R = 21, r = 12.5, n = 5;
+    for (let k = 0; k < n; k++) {
+      const a0 = (Math.PI * k) / n, a1 = (Math.PI * (k + 1)) / n;
+      g.append(el('path', { class: 'm', d: sector(cx, cy, R, r, a0, a1, 2.2, k > 0, k < n - 1) }));
+      g.append(el('path', { class: 'm', opacity: 0.2, d: sector(cx, cy, R, r, -a1, -a0, 2.2, k < n - 1, k > 0) }));
+    }
+    g.append(el('rect', { class: 'i', x: 6, y: cy - 0.8, width: 52, height: 1.6, rx: 0.8, opacity: 0.55 }));
+  }
+
+  // c5: W cut at its joints.
+  {
+    const g = document.querySelector('#c5g');
+    const P = [[10, 14], [21.5, 49], [32, 23], [42.5, 49], [54, 14]];
+    const cut = 4.6;
+    for (let k = 0; k < 4; k++) {
+      const [ax, ay] = P[k], [bx, by] = P[k + 1];
+      const len = Math.hypot(bx - ax, by - ay), ux = (bx - ax) / len, uy = (by - ay) / len;
+      const s = k === 0 ? 0 : cut, e = k === 3 ? 0 : cut;
+      g.append(el('line', { class: 'ms', 'stroke-width': 7, 'stroke-linecap': 'round', x1: f(ax + ux * s), y1: f(ay + uy * s), x2: f(bx - ux * e), y2: f(by - uy * e) }));
+    }
+  }
+
+  // c6: hull of six slices hanging under the surface.
+  {
+    const g = document.querySelector('#c6g');
+    const cx = 32, R = 21, top = 26, w = 4.6;
+    for (const dx of [-18.5, -11.1, -3.7, 3.7, 11.1, 18.5]) {
+      const h = Math.sqrt(R * R - dx * dx);
+      g.append(el('rect', { class: 'm', x: f(cx + dx - w / 2), y: top, width: w, height: f(h), rx: w / 2 }));
+    }
+    g.append(el('rect', { class: 'i', x: 8, y: 21.5, width: 48, height: 2, rx: 1, opacity: 0.55 }));
+  }
+
+  const CONCEPTS = [
+    ['c8', 'Current mark (for comparison)', 'Three bars on a line. Next to the desk\'s cost chart it reads as a bar chart icon.'],
+    ['c1', 'c1 Still w', 'The italic w of the headline\'s "wake", standing on water so still it reflects.'],
+    ['c2', 'c2 Sliced order', 'One order as a coin, cut into four slices of random width.'],
+    ['c3', 'c3 Still crossing', 'A cross-chain crossing built from five stones; the water is so still the reflection closes the circle.'],
+    ['c5', 'c5 Broken W', 'A W is two wakes; cut at the joints it cannot run on.'],
+    ['c6', 'c6 Hull of slices', 'A hull built from slices, under a flat surface.'],
+    ['c7', 'c7 Whale, no splash', 'The whale (a big trader) goes under without a splash.'],
+    ['c9', 'c9 Slices, reflected', 'Three slices on still water with clean reflections.'],
+    ['c13', 'c13 Porthole', 'A calm horizon seen from inside, one slice on it.'],
+  ];
+  const icon = (id, px, bg = 'tile') => `<svg width="${px}" height="${px}" viewBox="0 0 64 64"><use href="#${bg}"/><use href="#${id}"/></svg>`;
+  const mark = (id, px) => `<svg width="${px}" height="${px}" viewBox="0 0 64 64"><use href="#${id}"/></svg>`;
+  document.querySelector('#rows').innerHTML = CONCEPTS.map(([id, name, text]) => `
+    <div class="row" id="row-${id}">
+      ${icon(id, 150)}
+      <div><h2>${name}</h2><p>${text}</p>
+        <div class="sizes">
+          <span class="chip">${icon(id, 28, 'disc')}@wakeless</span>
+          <span class="chip light">${icon(id, 28, 'disc')}@wakeless</span>
+          <span class="pix" data-pix="${id}">${icon(id, 48)}${icon(id, 32)}${icon(id, 16)}</span>
+          <span class="on-light">${mark(id, 48)}</span>
+          <span class="lockup">${icon(id, 26)}<span>Wakeless</span></span>
+        </div>
+      </div>
+    </div>`).join('');
+  document.fonts.ready.then(() => requestAnimationFrame(() => { document.body.dataset.ready = '1'; }));
+</script>
+</body>
+</html>

@@ -80,9 +80,8 @@ em { font-style: italic; }
 }
 .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
 .mark { width: 26px; height: 26px; }
-.mark-bg { fill: #0d1318; stroke: var(--line-2); }
-.mark-bar { fill: var(--quiet); }
-.mark-line { fill: var(--ink); opacity: 0.55; }
+.mark-bg { fill: #0d1318; stroke: var(--line-2); stroke-width: 2; }
+.mark-w { fill: var(--quiet); }
 .wordmark { font: 400 24px/1 var(--serif); letter-spacing: 0; }
 .status {
   display: inline-flex;

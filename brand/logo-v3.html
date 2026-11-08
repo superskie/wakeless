@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wakeless logo v3</title>
+<!-- Open through the dev server (npm run web): /brand/logo-v3.html. v1: nine directions; v2: finalists. -->
+<link rel="stylesheet" href="/web/fonts.css">
+<style>
+  :root { --bg: #07090c; --panel: #0c1117; --line: rgba(226, 236, 245, 0.13); --ink: #edf2f7; --muted: #7b8795; --mint: #5ee0c1; --paper: #f3f5f7; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px; width: 1240px; background: var(--bg); color: var(--ink); font: 400 14px/1.5 "Geist", system-ui, sans-serif; }
+  h1 { font: 400 32px/1 "Instrument Serif", serif; margin: 0 0 6px; }
+  .lede { margin: 0 0 18px; color: var(--muted); }
+  .row { display: grid; grid-template-columns: 170px 1fr; gap: 22px; align-items: center; padding: 16px; border: 1px solid var(--line); background: var(--panel); border-radius: 12px; margin-bottom: 12px; }
+  .row.pick { border-color: rgba(94, 224, 193, 0.45); box-shadow: 0 0 0 1px rgba(94, 224, 193, 0.12), 0 20px 60px -30px rgba(94, 224, 193, 0.35); }
+  .row h2 { margin: 0 0 2px; font-size: 15px; font-weight: 600; }
+  .row h2 em { font-style: normal; color: var(--mint); font: 500 11px/1 "Geist Mono", monospace; letter-spacing: 0.08em; text-transform: uppercase; margin-left: 8px; vertical-align: 2px; }
+  .row p { margin: 0; color: var(--muted); max-width: 78ch; font-size: 13px; }
+  .sizes { display: flex; align-items: center; gap: 14px; margin-top: 12px; flex-wrap: wrap; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px 5px 5px; border-radius: 999px; background: #161d25; font-size: 13px; }
+  .chip.light { background: var(--paper); color: #0b0f14; }
+  .on-light { background: var(--paper); border-radius: 10px; padding: 6px; display: inline-flex; --mint: #1f9c82; --ink: #0b0f14; }
+  .lockup { display: inline-flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; background: #0a0d11; border: 1px solid var(--line); }
+  .lockup span { font: 400 27px/1 "Instrument Serif", serif; letter-spacing: -0.01em; }
+  .pix { display: inline-flex; gap: 8px; align-items: center; padding: 4px; background: var(--bg); }
+  .big { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+  .big > div { display: flex; align-items: center; gap: 18px; padding: 30px 32px; border-radius: 12px; }
+  .big .dark { background: var(--panel); border: 1px solid var(--line); }
+  .big .light { background: var(--paper); color: #0b0f14; }
+  .big span { font: 400 64px/1 "Instrument Serif", serif; letter-spacing: -0.015em; }
+  .m { fill: var(--mint); }
+  .i { fill: var(--ink); }
+  .tile-bg { fill: #0d1318; stroke: rgba(226, 236, 245, 0.13); }
+  .disc-bg { fill: #0d1318; }
+  .w { font-family: "Instrument Serif", serif; font-style: italic; }
+</style>
+</head>
+<body>
+<h1>Wakeless logo v3</h1>
+<p class="lede">Each mark at 170 px, as an X avatar (dark and light timeline), at 48, 32 and 16 px, on light, and in the site header.</p>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="tile" viewBox="0 0 64 64"><rect class="tile-bg" x="0.5" y="0.5" width="63" height="63" rx="14.5"/></symbol>
+    <symbol id="disc" viewBox="0 0 64 64"><circle class="disc-bg" cx="32" cy="32" r="32"/></symbol>
+
+    <!-- A. Whale, no splash. The tail of a diving whale, its stock entering water that stays flat.
+         Same geometry as brand/build.mjs. -->
+    <symbol id="a" viewBox="0 0 64 64">
+      <path class="m" d="M28.9 45.6C29.2 43 29.5 40.6 29.8 38.6C25.5 37.6 14.5 33.8 8.2 20.2C15.6 19.9 24.4 22.1 30.3 27.2L32 29.4L33.7 27.2C39.6 22.1 48.4 19.9 55.8 20.2C49.5 33.8 38.5 37.6 34.2 38.6C34.5 40.6 34.8 43 35.1 45.6Z"/>
+      <rect class="i" x="8" y="44.8" width="48" height="2" rx="1" opacity="0.55"/>
+    </symbol>
+
+    <!-- C. Sliced order: one coin, four slices of random width. -->
+    <mask id="cm" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <circle cx="32" cy="32" r="21" fill="#fff"/>
+      <rect x="19.4" y="0" width="2.6" height="64" fill="#000"/>
+      <rect x="27.9" y="0" width="2.6" height="64" fill="#000"/>
+      <rect x="40.4" y="0" width="2.6" height="64" fill="#000"/>
+    </mask>
+    <symbol id="c" viewBox="0 0 64 64"><rect class="m" width="64" height="64" mask="url(#cm)"/></symbol>
+
+    <!-- D. Still w: the italic w of the headline's "wake" on a flat surface. -->
+    <symbol id="d" viewBox="0 0 64 64">
+      <text class="m w" x="32" y="41" text-anchor="middle" font-size="60">w</text>
+      <rect class="i" x="9" y="45.2" width="46" height="2" rx="1" opacity="0.55"/>
+    </symbol>
+
+    <!-- Current mark, for comparison. -->
+    <symbol id="z" viewBox="0 0 64 64">
+      <rect class="m" x="14" y="18" width="6" height="22" rx="3"/>
+      <rect class="m" x="29" y="26" width="6" height="14" rx="3"/>
+      <rect class="m" x="44" y="14" width="6" height="26" rx="3"/>
+      <rect class="i" x="12" y="48" width="40" height="4" rx="2" opacity="0.55"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div id="rows"></div>
+
+<div class="big">
+  <div class="dark"><svg width="76" height="76" viewBox="0 0 64 64"><use href="#tile"/><use href="#a"/></svg><span>Wakeless</span></div>
+  <div class="light"><svg width="76" height="76" viewBox="0 0 64 64"><use href="#tile"/><use href="#a"/></svg><span>Wakeless</span></div>
+</div>
+
+<script>
+  const CONCEPTS = [
+    ['a', 'A · Whale, no splash', 'Recommended', 'In crypto a whale is a big trader. Its tail goes under and the surface stays flat: big trades, no wake. One silhouette that holds at 16 px and in a round avatar. Whale imagery is common in crypto (Whales Market, Whale Tail); the flat water and the line "Big trades. No wake." are what make this one ours.'],
+    ['c', 'C · Sliced order', 'Runner-up', 'One order as a coin, cut into four slices of random width: the mechanism, abstract and bold. It leaves the water to the name, and at 16 px it is a striped coin.'],
+    ['d', 'D · Still w', '', 'The italic w of the headline\'s "wake", standing on a flat surface. Ties the mark to the type, but says little about the product, and the header would read "w Wakeless".'],
+    ['z', 'Current mark (for comparison)', '', 'Three bars on a line: next to the desk\'s cost chart it reads as a bar chart icon.'],
+  ];
+  const icon = (id, px, bg = 'tile') => `<svg width="${px}" height="${px}" viewBox="0 0 64 64"><use href="#${bg}"/><use href="#${id}"/></svg>`;
+  const mark = (id, px) => `<svg width="${px}" height="${px}" viewBox="0 0 64 64"><use href="#${id}"/></svg>`;
+  document.querySelector('#rows').innerHTML = CONCEPTS.map(([id, name, tag, text]) => `
+    <div class="row${tag === 'Recommended' ? ' pick' : ''}" id="row-${id}">
+      ${icon(id, 170)}
+      <div><h2>${name}${tag ? `<em>${tag}</em>` : ''}</h2><p>${text}</p>
+        <div class="sizes">
+          <span class="chip">${icon(id, 28, 'disc')}@wakeless</span>
+          <span class="chip light">${icon(id, 28, 'disc')}@wakeless</span>
+          <span class="pix" data-pix="${id}">${icon(id, 48)}${icon(id, 32)}${icon(id, 16)}</span>
+          <span class="on-light">${mark(id, 48)}</span>
+          <span class="lockup">${icon(id, 26)}<span>Wakeless</span></span>
+        </div>
+      </div>
+    </div>`).join('');
+  document.fonts.ready.then(() => requestAnimationFrame(() => { document.body.dataset.ready = '1'; }));
+</script>
+</body>
+</html>

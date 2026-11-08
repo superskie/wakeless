@@ -7,7 +7,9 @@
     Renders the link card (og:image) from the landing page's own water scene,
     fonts and colours. Not shipped: scripts/build-site.mjs skips web/dev/.
     Re-render: npm run web, open /web/dev/og.html at device scale 2, wait for
-    body[data-ready], capture #og (1200 x 630) as PNG to web/assets/og.png.
+    body[data-ready], capture #og (1200 x 630) as PNG to web/assets/og-vN.png
+    (a new name each time: X caches a card image per URL), then point
+    og:image in web/home.html and web/index.html at it.
   -->
   <link rel="stylesheet" href="/web/fonts.css">
   <style>
@@ -29,7 +31,7 @@
     .og .divider { position: absolute; left: 50%; bottom: 0; height: 31%; width: 1px; background: linear-gradient(180deg, transparent, var(--line-2)); }
     .copy { position: absolute; left: 72px; top: 54px; right: 72px; }
     .lockup { display: flex; align-items: center; gap: 14px; }
-    .lockup svg { width: 40px; height: 40px; }
+    .lockup img { width: 44px; height: 44px; }
     .lockup span { font: 400 36px/1 "Instrument Serif", Georgia, serif; }
     .eyebrow { margin: 38px 0 0; color: var(--muted); font: 500 17px/1 "Geist Mono", monospace; letter-spacing: 0.12em; text-transform: uppercase; }
     h1 { margin: 18px 0 0; font: 400 112px/0.9 "Instrument Serif", Georgia, serif; letter-spacing: -0.025em; }
@@ -41,13 +43,7 @@
   <template id="copy">
     <div class="copy">
       <div class="lockup">
-        <svg viewBox="0 0 32 32" aria-hidden="true">
-          <rect width="32" height="32" rx="8" fill="#0d1318" stroke="rgba(226,236,245,0.13)"/>
-          <rect x="7" y="9" width="3" height="11" rx="1.5" fill="#5ee0c1"/>
-          <rect x="14.5" y="13" width="3" height="7" rx="1.5" fill="#5ee0c1"/>
-          <rect x="22" y="7" width="3" height="13" rx="1.5" fill="#5ee0c1"/>
-          <rect x="6" y="24" width="20" height="2" rx="1" fill="#edf2f7" opacity="0.55"/>
-        </svg>
+        <img src="/web/favicon.svg" alt="">
         <span>Wakeless</span>
       </div>
       <p class="eyebrow">Private order execution / NEAR Intents</p>
@@ -68,6 +64,7 @@
     for (const canvas of document.querySelectorAll('.og canvas')) {
       startWater(canvas, { band: 0.31, at: Number(canvas.dataset.at), labelSize: 22, scale: 1.35 });
     }
+    await Promise.all([...document.images].map((img) => img.decode().catch(() => {})));
     requestAnimationFrame(() => requestAnimationFrame(() => { document.body.dataset.ready = '1'; }));
   </script>
 </body>

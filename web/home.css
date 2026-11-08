@@ -76,9 +76,8 @@ svg text { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 }
 .brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; }
 .mark { width: 26px; height: 26px; }
-.mark-bg { fill: #0d1318; stroke: var(--line-2); }
-.mark-bar { fill: var(--quiet); }
-.mark-line { fill: var(--ink); opacity: 0.55; }
+.mark-bg { fill: #0d1318; stroke: var(--line-2); stroke-width: 2; }
+.mark-w { fill: var(--quiet); }
 .wordmark { font: 400 24px/1 var(--serif); }
 .topnav { margin-left: auto; display: flex; align-items: center; gap: 2px; font-size: 13.5px; }
 .topnav a { color: var(--ink-2); text-decoration: none; padding: 6px 12px; border-radius: 999px; transition: color 0.2s, background 0.2s; }
