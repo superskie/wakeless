@@ -25,7 +25,16 @@
   <link rel="preload" href="/web/fonts/InstrumentSerif-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/web/fonts/InstrumentSerif-400i.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="/web/fonts/Geist-var.woff2" as="font" type="font/woff2" crossorigin>
-  <script>document.documentElement.classList.add('js');</script>
+  <script>
+    // .reveal blocks start hidden and the page module shows them as they scroll in. If the module
+    // never starts (a failed import, an old browser), show them all after a few seconds instead.
+    document.documentElement.classList.add('js');
+    setTimeout(function () {
+      if (document.documentElement.hasAttribute('data-started')) return;
+      var blocks = document.querySelectorAll('.reveal');
+      for (var i = 0; i < blocks.length; i++) blocks[i].classList.add('in');
+    }, 4000);
+  </script>
   <link rel="stylesheet" href="/web/fonts.css">
   <link rel="stylesheet" href="/web/home.css">
   <script type="module" src="/web/home.mjs"></script>

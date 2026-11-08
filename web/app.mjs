@@ -10,11 +10,12 @@ import { realClock } from '../src/clock.mjs';
 import { buildReport } from '../src/report.mjs';
 import { adviceText, precheck } from '../src/precheck.mjs';
 import { mulberry32 } from '../src/rng.mjs';
-import { resolveAsset } from '../src/assets.mjs';
+import { resolveAsset, usableTokens } from '../src/assets.mjs';
 import { memoryJournal, parseJsonl, toJsonl } from '../src/memory-journal.mjs';
 import { toNumber } from '../src/units.mjs';
-import { HOSTED } from '../src/agent/hosted.mjs';
-import { createLive, LIVE_ASSETS } from './live.mjs';
+import { chipAmount, clockTime, dollars, failureReason, mmss, num, oneShotGap, penaltyText, plainMessage, qty, reportMode, signed, signedQty } from './format.mjs';
+// Live mode (live.mjs and the hosted limits) is imported in loadLive(), so a
+// failure in its wallet code cannot take Simulate down with it.
 
 // Two committed $500k runs of the same order: a thin market and a deeper one.
 const SAMPLE_RUNS = {
@@ -31,12 +32,25 @@ const client = createOneClick();
 const newSeed = () => crypto.getRandomValues(new Uint32Array(1))[0] >>> 1;
 // `idle`: the monitor shows the plan preview until the first run or replay starts.
 const state = { tokens: null, busy: false, precheckBusy: false, targetUsd: 500_000, lastRun: null, idle: true, planSeed: newSeed(), mode: 'sim', lockedSpec: null };
-// Simulated orders are sized for the price impact they show; live ones stay under the hosted cap.
+// Simulated orders are sized for the price impact they show; live ones stay
+// under the hosted cap. The live entry is filled in when live.mjs loads.
 const MODES = {
   sim: { assets: ASSETS, pair: ['usdc:arb', 'sol:sol'], chips: [100_000, 250_000, 500_000, 1_000_000], usd: 500_000, windows: [10, 30, 60, 120], window: 30, slices: [1, 64, 16] },
-  live: { assets: LIVE_ASSETS, pair: ['eth:base', 'sol:sol'], chips: [10, 25, HOSTED.maxOrderUsd], usd: 25, windows: [5, 10, 15, 30], window: 10, slices: [HOSTED.minSlices, HOSTED.maxSlices, 4] },
+  live: null,
 };
+const liveMode = (assets, hosted) => ({
+  assets,
+  pair: ['eth:base', 'sol:sol'],
+  chips: [10, 25, hosted.maxOrderUsd],
+  usd: 25,
+  windows: [5, 10, 15, 30],
+  window: 10,
+  slices: [hosted.minSlices, hosted.maxSlices, 4],
+});
 let liveDesk = null;
+// Set when live.mjs could not load; Simulate keeps working without it.
+let liveError = null;
+let liveLoading = null;
 
 // ---------- small helpers ----------
 
@@ -61,24 +75,12 @@ function html(tag, attrs = {}, children = []) {
   return node;
 }
 
-const num = (value, digits = 2) =>
-  value == null || !Number.isFinite(value)
-    ? '-'
-    : value.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-const signed = (value, digits = 1) => (value == null || !Number.isFinite(value) ? '-' : `${value >= 0 ? '+' : ''}${num(value, digits)}`);
-const mmss = (ms) => {
-  const s = Math.max(0, Math.round(ms / 1000));
-  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-};
-const chainName = (id) => CHAINS[id] ?? id.toUpperCase();
+const chainName = (id) => CHAINS[id] ?? String(id).toUpperCase();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const human = (units, decimals) => toNumber(BigInt(units), decimals);
 const compact = (value) =>
   value >= 1e6 ? `${num(value / 1e6, 1)}M` : value >= 1e3 ? `${num(value / 1e3, value >= 1e4 ? 0 : 1)}k` : num(value, value >= 10 ? 0 : 2);
-const digitsFor = (price) => (price >= 1000 ? 4 : price >= 10 ? 3 : price >= 0.5 ? 2 : 0);
-// Token amounts: whole units when large, three significant digits when small (0.00096 ETH).
-const qty = (value) =>
-  !(value > 0) ? num(value, 0) : value >= 100 ? num(value, 0) : value >= 1 ? num(value, 2) : num(value, Math.min(10, 2 - Math.floor(Math.log10(value))));
+const modeRadios = () => document.querySelectorAll('input[name="mode"]');
 
 // ---------- status, assets, ticket ----------
 
@@ -106,8 +108,11 @@ function populateAssets(tokens, refs = MODES[state.mode].assets, [sellRef, buyRe
     sell.append(html('option', { value: ref, text: label }));
     buy.append(html('option', { value: ref, text: label }));
   }
-  sell.value = sellRef;
-  buy.value = buyRef;
+  // A delisted or renamed default falls back to the first asset that resolved.
+  const refsFound = [...sell.options].map((option) => option.value);
+  if (!refsFound.length) throw new Error("none of the desk's assets is in the 1Click token list");
+  sell.value = refsFound.includes(sellRef) ? sellRef : refsFound[0];
+  buy.value = refsFound.includes(buyRef) && buyRef !== sell.value ? buyRef : refsFound.find((ref) => ref !== sell.value) ?? refsFound[0];
 }
 
 function selected(which) {
@@ -118,9 +123,9 @@ function setAmountFromUsd(usd) {
   state.targetUsd = usd;
   if (!state.tokens) return;
   const sell = selected('#sell');
-  // Stablecoins are entered at face value; everything else converts at the 1Click price.
-  const amount = Math.abs(sell.price - 1) < 0.01 ? usd : usd / sell.price;
-  $('#amount').value = String(Number(amount.toFixed(digitsFor(sell.price))));
+  // Stablecoins go in at face value, everything else at the 1Click price,
+  // rounded down; a live chip also converts a stablecoin above $1 (the cap).
+  $('#amount').value = chipAmount(usd, sell.price, { decimals: sell.decimals, atMost: state.mode === 'live' });
   syncAmountHint();
 }
 
@@ -168,6 +173,13 @@ function setBusy(busy, label) {
   run.querySelector('.run-label').textContent = busy ? label : 'Work this order';
   for (const id of Object.keys(SAMPLE_RUNS)) $(`#${id}`).disabled = busy;
   $('#precheck-run').disabled = busy || state.precheckBusy;
+  // A run or replay keeps its mode to the end.
+  for (const radio of modeRadios()) radio.disabled = busy;
+}
+
+/** The toggle shows the mode the page is in, also after applyMode refused a switch. */
+function syncModeRadios() {
+  for (const radio of modeRadios()) radio.checked = radio.value === state.mode;
 }
 
 function wireTicket() {
@@ -176,8 +188,13 @@ function wireTicket() {
     // In live mode the run starts from its own step, never from Enter in a field.
     if (state.mode === 'sim') runLive();
   });
-  for (const radio of document.querySelectorAll('input[name="mode"]')) {
-    radio.addEventListener('change', () => radio.checked && applyMode(radio.value));
+  for (const radio of modeRadios()) {
+    radio.addEventListener('change', async () => {
+      if (!radio.checked) return;
+      if (radio.value === 'live') await liveLoading;
+      // Another click may have come in while Live mode was loading.
+      if (radio.checked && !applyMode(radio.value)) syncModeRadios();
+    });
   }
   for (const type of ['input', 'change']) {
     $('#ticket').addEventListener(type, (event) => {
@@ -276,6 +293,8 @@ async function runPrecheck() {
   }
   const out = $('#precheck-out');
   const button = $('#precheck-run');
+  // The ticket stays editable while the quotes come in; a result is only shown for the order it checked.
+  const key = checkKey();
   state.precheckBusy = true;
   button.disabled = true;
   out.hidden = false;
@@ -291,10 +310,11 @@ async function runPrecheck() {
         progress.textContent = `Quoted ${row.slices} slice${row.slices === 1 ? '' : 's'}.`;
       },
     });
-    renderPrecheck(result);
+    if (checkKey() === key) renderPrecheck(result, key);
+    else showStaleCheck();
   } catch (err) {
     out.textContent = '';
-    out.append(html('p', { class: 'hint', text: `The check failed: ${err.message}` }));
+    out.append(html('p', { class: 'hint', text: `The check failed: ${plainMessage(err.message)}` }));
   } finally {
     state.precheckBusy = false;
     button.disabled = state.busy;
@@ -302,15 +322,43 @@ async function runPrecheck() {
   }
 }
 
-function renderPrecheck(r) {
+/** What the check depends on. It tries every slice count itself, and the window and the floor do not enter it. */
+function checkKey() {
+  return JSON.stringify([state.mode, $('#sell').value, $('#buy').value, $('#amount').value.trim()]);
+}
+
+function showStaleCheck() {
   const out = $('#precheck-out');
   out.textContent = '';
+  out.append(html('p', { class: 'hint', text: 'The ticket changed during the check. Check again for this order.' }));
+}
+
+function renderPrecheck(r, key) {
+  const out = $('#precheck-out');
+  out.textContent = '';
+  const usd = r.totalUsd ? `, about $${num(r.totalUsd, 0)}` : '';
+  out.append(
+    html('p', {
+      class: 'hint',
+      text: `Checked ${qty(human(r.totalUnits, r.sell.decimals))} ${r.sell.symbol} on ${chainName(r.sell.blockchain)} for ${r.buy.symbol} on ${chainName(r.buy.blockchain)}${usd}.`,
+    }),
+  );
+  // Without the reference quote every size reads +0.0 bps, so there is no table to show.
+  if (!r.reference.q.ok) {
+    out.append(
+      html('p', {
+        class: 'precheck-advice',
+        text: `1Click did not quote the $${num(r.referenceUsd, 0)} reference swap (${failureReason(r.reference.q)}), so there is nothing to measure the sizes against. Check again in a minute.`,
+      }),
+    );
+    return;
+  }
   const each = (row) => (r.totalUsd ? `$${num(r.totalUsd / row.slices, 0)}` : '-');
   const body = r.rows.map((row) =>
     html('tr', row.slices === r.recommendedSlices ? { class: 'pick' } : {}, [
       html('td', { text: String(row.slices) }),
       html('td', { text: each(row) }),
-      html('td', { text: row.q.ok ? `${signed(Math.abs(row.penaltyBps) < 0.05 ? 0 : row.penaltyBps)} bps` : 'no quote' }),
+      html('td', { text: penaltyText(row) }),
     ]),
   );
   out.append(
@@ -319,10 +367,13 @@ function renderPrecheck(r) {
       html('tbody', {}, body),
     ]),
   );
-  out.append(html('p', { class: 'precheck-advice', text: adviceText(r) }));
+  // The advice quotes 1Click's message for a failed one swap; a gateway error arrives as HTML.
+  const one = r.rows.find((row) => row.slices === 1);
+  out.append(html('p', { class: 'precheck-advice', text: adviceText({ ...r, oneSwapMessage: r.oneSwapMessage == null ? null : failureReason(one?.q) }) }));
   if (r.recommendedSlices && r.recommendedSlices !== Number($('#slices').value)) {
     const use = html('button', { class: 'btn small', type: 'button', text: `Use ${r.recommendedSlices} slice${r.recommendedSlices === 1 ? '' : 's'}` });
     use.addEventListener('click', () => {
+      if (checkKey() !== key) return showStaleCheck();
       setSlices(r.recommendedSlices);
       use.remove();
     });
@@ -439,6 +490,12 @@ function startMonitor({ speed }) {
   let horizon = 1;
   let lastT = 0;
   let lastWall = performance.now();
+  // The clock's reading never goes back; it waits at `cap`, the next scheduled
+  // slice (0 until the arrival quotes are in), while the engine is quoting.
+  let shown = 0;
+  let cap = 0;
+  let arrived = false;
+  let slots = [];
   let raf = 0;
   let nowLine = null;
   let bars = null;
@@ -454,13 +511,17 @@ function startMonitor({ speed }) {
     nowLine = svg('line', { class: 'tl now', x1: L, x2: L, y1: T - 4, y2: T + plotH }, root);
   }
 
+  function paintClock(t) {
+    nowLine.setAttribute('x1', x(t));
+    nowLine.setAttribute('x2', x(t));
+    $('#clock').textContent = `${mmss(t)} / ${mmss(horizon)}`;
+  }
+
   function tick() {
     raf = requestAnimationFrame(tick);
     if (!order) return;
-    const now = Math.min(horizon, lastT + (performance.now() - lastWall) * speed);
-    nowLine.setAttribute('x1', x(now));
-    nowLine.setAttribute('x2', x(now));
-    $('#clock').textContent = `${mmss(now)} / ${mmss(horizon)}`;
+    shown = clockTime({ shown, lastT, sinceMs: performance.now() - lastWall, speed, horizon, cap });
+    paintClock(shown);
   }
 
   function addRow({ t, what, px, tag, cls, info }) {
@@ -482,6 +543,9 @@ function startMonitor({ speed }) {
   function onEvent(event) {
     lastT = event.t ?? lastT;
     lastWall = performance.now();
+    if (event.type === 'order') slots = event.schedule.map((s) => s.atMs).sort((a, b) => a - b);
+    if (event.type === 'arrival') arrived = true;
+    cap = arrived ? slots.find((t) => t > lastT) ?? horizon : 0;
     switch (event.type) {
       case 'order': {
         order = event.order;
@@ -495,7 +559,7 @@ function startMonitor({ speed }) {
         }
         addRow({
           info: true,
-          what: `Order: ${num(Number(order.amount), 2)} ${order.sell.symbol} on ${chainName(order.sell.blockchain)} for ${order.buy.symbol} on ${chainName(order.buy.blockchain)}, ${order.slices} slices over ${mmss(horizon)}. Seed ${event.seed}.`,
+          what: `Order: ${qty(Number(order.amount))} ${order.sell.symbol} on ${chainName(order.sell.blockchain)} for ${order.buy.symbol} on ${chainName(order.buy.blockchain)}, ${order.slices} slices over ${mmss(horizon)}. Seed ${event.seed}.`,
         });
         raf = requestAnimationFrame(tick);
         break;
@@ -504,16 +568,21 @@ function startMonitor({ speed }) {
         setStep('working');
         const p = event.probe.q;
         const o = event.oneShot.q;
-        const probe = p.ok ? `one slice-sized swap costs ${num(p.costBps, 1)} bps` : `slice-sized quote failed (${p.message})`;
-        const whole = o.ok ? `the whole order in one swap costs ${num(o.costBps, 1)} bps` : `the whole order in one swap gets no quote (${o.message})`;
+        const probe = p.ok ? `one slice-sized swap costs ${num(p.costBps, 1)} bps` : `slice-sized quote failed (${failureReason(p)})`;
+        // Only "no liquidity" means the market refused the size; an error or a timeout is just no answer.
+        const whole = o.ok
+          ? `the whole order in one swap costs ${num(o.costBps, 1)} bps`
+          : o.noLiquidity === false
+            ? `1Click did not answer the whole-order quote (${failureReason(o)})`
+            : `the whole order in one swap gets no quote (${failureReason(o)})`;
         addRow({ t: 0, info: true, what: `Arrival: ${probe}; ${whole}.` });
         break;
       }
       case 'slice': {
         const { slice, decision, quote } = event;
         const q = quote.q;
-        const size = `Slice ${slice.id}, ${num(human(slice.amount, order.sell.decimals), 2)} ${order.sell.symbol}`;
-        const px = q.ok ? `${num(q.costBps, 1)} bps` : q.message;
+        const size = `Slice ${slice.id}, ${qty(human(slice.amount, order.sell.decimals))} ${order.sell.symbol}`;
+        const px = q.ok ? `${num(q.costBps, 1)} bps` : failureReason(q);
         const baseId = slice.id.replace(/[ab]+$/, '');
         const ghost = root.querySelector(`#ghost-${baseId}`);
         if (decision.action === 'execute') {
@@ -540,7 +609,7 @@ function startMonitor({ speed }) {
         break;
       }
       case 'abort':
-        addRow({ t: event.t, info: true, what: `Stopped: ${event.message}.` });
+        addRow({ t: event.t, info: true, what: `Stopped: ${plainMessage(event.message)}.` });
         break;
       default:
         break;
@@ -549,11 +618,7 @@ function startMonitor({ speed }) {
 
   function stop() {
     cancelAnimationFrame(raf);
-    if (order) {
-      nowLine?.setAttribute('x1', x(lastT));
-      nowLine?.setAttribute('x2', x(lastT));
-      $('#clock').textContent = `${mmss(lastT)} / ${mmss(horizon)}`;
-    }
+    if (order && nowLine) paintClock(Math.max(shown, lastT));
   }
 
   function finish(events) {
@@ -567,7 +632,7 @@ function startMonitor({ speed }) {
 
   function fail(message) {
     stop();
-    addRow({ info: true, what: `Stopped: ${message}` });
+    addRow({ info: true, what: `Stopped: ${plainMessage(message)}` });
   }
 
   return { onEvent, finish, fail };
@@ -588,12 +653,14 @@ function renderResult(r, events) {
   box.textContent = '';
   box.hidden = false;
   const o = r.vsOneShot;
-  const kicker = html('p', { class: 'kicker', text: r.mode === 'dry' ? 'Report, dry run' : 'Report' });
+  const mode = reportMode(r.mode);
+  const gap = o.executable ? null : oneShotGap(o, { total: r.total, symbol: r.sell.symbol });
+  const kicker = html('p', { class: 'kicker', text: mode.kicker });
   let headline;
   let sub;
   if (r.aborted) {
     headline = html('h3', { class: 'headline worse' }, ['Stopped ', html('em', { text: 'before the first slice' })]);
-    sub = html('p', { class: 'sub', text: r.abortMessage ?? '' });
+    sub = html('p', { class: 'sub', text: plainMessage(r.abortMessage) });
   } else if (o.executable && o.deltaBps != null) {
     // Same measure as the CLI report and the README: what the slices received
     // against one swap of the whole order quoted at arrival.
@@ -605,11 +672,15 @@ function renderResult(r, events) {
     ]);
     sub = html('p', {
       class: 'sub',
-      text: `${signed(o.deltaBuy, 6)} ${r.buy.symbol}${o.deltaUsd != null ? `, about $${num(Math.abs(o.deltaUsd), 0)} ${o.deltaUsd >= 0 ? 'more' : 'less'}` : ''} for the same ${num(Number(r.filled), 2)} ${r.sell.symbol}.`,
+      text: `${signedQty(o.deltaBuy)} ${r.buy.symbol}${o.deltaUsd != null ? `, about ${dollars(o.deltaUsd)} ${o.deltaUsd >= 0 ? 'more' : 'less'}` : ''} for the same ${qty(Number(r.filled))} ${r.sell.symbol}.`,
     });
+  } else if (o.executable) {
+    // One swap was quoted, but no slice filled: there is nothing to set against it.
+    headline = html('h3', { class: 'headline' }, ['Filled ', html('em', { text: `${num(r.filledPct, 1)}%` }), '. Nothing to compare.']);
+    sub = html('p', { class: 'sub', text: `No slice filled, so there is nothing to compare with one swap of the whole ${qty(Number(r.total))} ${r.sell.symbol}.` });
   } else {
-    headline = html('h3', { class: 'headline' }, ['Filled ', html('em', { text: `${num(r.filledPct, 1)}%` }), '. One swap got no quote.']);
-    sub = html('p', { class: 'sub', text: `1Click answered the whole ${num(Number(r.total), 2)} ${r.sell.symbol} with "${o.message}". The slices received ${num(Number(r.received), 6)} ${r.buy.symbol}.` });
+    headline = html('h3', { class: 'headline' }, ['Filled ', html('em', { text: `${num(r.filledPct, 1)}%` }), `. ${gap.headline}`]);
+    sub = html('p', { class: 'sub', text: `${gap.detail} The slices received ${qty(Number(r.received))} ${r.buy.symbol}.` });
   }
   box.append(kicker, headline, sub);
 
@@ -617,13 +688,13 @@ function renderResult(r, events) {
     const sliced = r.costs.executionCostBps;
     const one = o.executable ? o.costBps : null;
     const max = Math.max(sliced ?? 0, one ?? 0, 1);
-    const row = (cls, label, value) =>
+    const row = (cls, label, value, missing) =>
       html('div', { class: `cmp-row ${cls}` }, [
         html('span', { text: label }),
         html('div', { class: 'cmp-bar' }, html('i', { style: `width:${value == null ? 0 : (value / max) * 100}%` })),
-        html('span', { class: 'v', text: value == null ? 'no quote' : `${num(value, 1)} bps` }),
+        html('span', { class: 'v', text: value == null ? missing : `${num(value, 1)} bps` }),
       ]);
-    box.append(html('div', { class: 'cmp' }, [row('one', 'One swap', one), row('sliced', `${r.slices.fills} slices`, sliced)]));
+    box.append(html('div', { class: 'cmp' }, [row('one', 'One swap', one, gap?.bar ?? 'no quote'), row('sliced', `${r.slices.fills} slices`, sliced, 'no fills')]));
 
     const reasons = r.slices.reasons;
     const waited = (reasons.below_floor_wait ?? 0) + (reasons.no_liquidity_wait ?? 0) + (reasons.quote_failed_wait ?? 0);
@@ -638,7 +709,7 @@ function renderResult(r, events) {
         stat(String(r.seed ?? '-'), 'seed'),
       ]),
     );
-    box.append(html('p', { class: 'fineprint', text: 'Both costs are measured the same way and include the same 1Click platform fee. Dry run: each fill is simulated at its live quote.' }));
+    box.append(html('p', { class: 'fineprint', text: mode.fineprint }));
   }
 
   const download = html('button', { class: 'btn small', type: 'button', text: 'Download journal' });
@@ -651,8 +722,13 @@ function renderResult(r, events) {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
-  const again = html('button', { class: 'btn small ghost', type: 'button', text: 'Run again' });
-  again.addEventListener('click', runLive);
+  // "Run again" simulates the ticket, so it only follows a dry run: after a live
+  // run it would replace the report of real swaps with a simulation.
+  let again = null;
+  if (mode.rerun) {
+    again = html('button', { class: 'btn small ghost', type: 'button', text: 'Run again' });
+    again.addEventListener('click', runLive);
+  }
   box.append(html('div', { class: 'actions' }, [download, again]));
 }
 
@@ -664,7 +740,8 @@ function scrollToDesk() {
 }
 
 async function runLive() {
-  if (state.busy) return;
+  // A dry run of the ticket; in live mode the ticket belongs to the agent wallet.
+  if (state.busy || state.mode !== 'sim') return;
   showError('');
   if (!state.tokens) {
     showError('1Click is not reachable right now. The committed run can still be replayed.');
@@ -721,8 +798,13 @@ function setChips(values) {
   });
 }
 
+/** Returns false when the switch is refused, so the toggle can go back to the mode the page is in. */
 function applyMode(mode) {
-  if (state.busy || liveDesk?.running) return;
+  if (state.busy || liveDesk?.running) return false;
+  if (mode === 'live' && !liveDesk) {
+    showError(liveError ?? 'Live mode is still loading. Try again in a moment.');
+    return false;
+  }
   state.mode = mode;
   const m = MODES[mode];
   const live = mode === 'live';
@@ -738,13 +820,19 @@ function applyMode(mode) {
   setSlices(start);
   clearPrecheck();
   showError('');
+  state.targetUsd = m.usd;
   if (state.tokens) {
-    populateAssets(state.tokens);
-    setAmountFromUsd(m.usd);
+    try {
+      populateAssets(state.tokens);
+      setAmountFromUsd(m.usd);
+    } catch (err) {
+      showError(`The ticket could not be filled: ${err.message}.`);
+    }
   }
   if (live) liveDesk.show();
-  else liveDesk.hide();
+  else liveDesk?.hide();
   renderPlan();
+  return true;
 }
 
 /** Once an agent wallet exists its signed limits fix the order, so the ticket shows that order and locks. */
@@ -806,7 +894,7 @@ async function loadReplayStats() {
         if (!res.ok) return;
         const o = buildReport(parseJsonl(await res.text())).vsOneShot;
         if (o.deltaBps == null) return;
-        const label = `${signed(o.deltaBps, 1)} bps vs one swap${o.deltaUsd != null ? `, about $${num(Math.abs(o.deltaUsd), 0)}` : ''}`;
+        const label = `${signed(o.deltaBps, 1)} bps vs one swap${o.deltaUsd != null ? `, about ${dollars(o.deltaUsd)}` : ''}`;
         document.querySelector(`.rc-val[data-run="${id}"]`).textContent = label;
       } catch {
         // The card still replays; it just does not show the result first.
@@ -838,34 +926,78 @@ function startMotion() {
 
 // ---------- start ----------
 
-async function init() {
-  liveDesk = createLive({
-    ticket: currentSpec,
-    // null: a native coin; undefined: not in the 1Click list, so the page will not send it.
-    contractOf: (assetId) => {
-      const token = state.tokens?.find((t) => t.assetId === assetId);
-      return token ? token.contractAddress ?? null : undefined;
-    },
-    lockTicket,
-    workOrder,
-  });
-  wireTicket();
-  renderPlan();
-  startMotion();
-  loadReplayStats();
-  const res = await client.tokens();
-  if (!res.ok || !Array.isArray(res.json)) {
-    setStatus('down', '1Click unreachable. The replay still works.');
-    $('#plan-caption').dataset.down = '1Click is unreachable, so there is no token list to plan with. The replays still work.';
+/** Live mode loads on its own: if its wallet code fails, Simulate and the replays keep working. */
+async function loadLive() {
+  try {
+    const [{ createLive, LIVE_ASSETS }, { HOSTED }] = await Promise.all([import('./live.mjs'), import('../src/agent/hosted.mjs')]);
+    MODES.live = liveMode(LIVE_ASSETS, HOSTED);
+    liveDesk = createLive({
+      ticket: currentSpec,
+      // null: a native coin; undefined: not in the 1Click list, so the page will not send it.
+      contractOf: (assetId) => {
+        const token = state.tokens?.find((t) => t.assetId === assetId);
+        return token ? token.contractAddress ?? null : undefined;
+      },
+      lockTicket,
+      workOrder,
+      // The desk's own 1Click list, so Live checks assets against it without a second fetch.
+      oneClickTokens: () => state.tokens,
+    });
+  } catch (err) {
+    MODES.live = null;
+    liveDesk = null;
+    liveError = `Live mode did not load (${plainMessage(err.message, 80)}). Simulate still works; reload to try Live again.`;
+  }
+}
+
+// Seconds between tries while the token list is down; after the last one the status asks for a reload.
+const TOKEN_RETRY_S = [5, 15, 30, 60, 120];
+
+async function loadTokens(attempt = 0) {
+  if (attempt) setStatus('pending', 'Connecting to 1Click again');
+  const res = await client.tokens().catch((err) => ({ ok: false, json: { message: err.message } }));
+  const tokens = res.ok ? usableTokens(res.json) : [];
+  if (!tokens.length) {
+    const wait = TOKEN_RETRY_S[attempt];
+    const what = res.ok ? '1Click sent no usable token list' : '1Click is unreachable';
+    setStatus('down', `${what}. The replays still work.`, wait ? ` Trying again in ${wait} s.` : ' Reload to try again.');
+    $('#plan-caption').dataset.down = `${what}, so there is no token list to plan with. The replays still work.`;
     renderPlan();
+    if (wait) setTimeout(() => loadTokens(attempt + 1), wait * 1000);
     return;
   }
-  state.tokens = res.json;
-  const chains = new Set(state.tokens.map((t) => t.blockchain)).size;
-  setStatus('live', '1Click live', `: ${state.tokens.length} tokens on ${chains} chains`);
-  populateAssets(state.tokens);
-  setAmountFromUsd(state.targetUsd);
-  onPairChange();
+  try {
+    state.tokens = tokens;
+    delete $('#plan-caption').dataset.down;
+    populateAssets(tokens);
+    setAmountFromUsd(state.targetUsd);
+    onPairChange();
+    // A live ticket locked before the list arrived had no options to show it with.
+    if (state.lockedSpec) {
+      const spec = JSON.parse(state.lockedSpec);
+      state.lockedSpec = null;
+      lockTicket(spec);
+    }
+    if (state.mode === 'live') liveDesk?.render();
+    const chains = new Set(tokens.map((t) => t.blockchain)).size;
+    setStatus('live', '1Click live', `: ${tokens.length} tokens on ${chains} chains`);
+  } catch (err) {
+    setStatus('down', '1Click answered, but the desk could not use its token list.', ` ${plainMessage(err.message, 100)}.`);
+    $('#plan-caption').dataset.down = `The 1Click token list could not be used: ${plainMessage(err.message, 100)}.`;
+    renderPlan();
+  }
+}
+
+function init() {
+  // First, so the page shows even if a later step throws. data-started tells
+  // the inline script in the page head not to reveal everything itself.
+  startMotion();
+  document.documentElement.setAttribute('data-started', '');
+  wireTicket();
+  renderPlan();
+  loadReplayStats();
+  liveLoading = loadLive();
+  loadTokens();
 }
 
 init();

@@ -245,11 +245,27 @@ function initNav() {
   document.querySelectorAll('main section[id]').forEach((s) => io.observe(s));
 }
 
-$('#confidential-link').href = new URL(CONFIDENTIAL_QUOTES, import.meta.url).pathname;
+function initLinks() {
+  $('#confidential-link').href = new URL(CONFIDENTIAL_QUOTES, import.meta.url).pathname;
+}
+
+// Reveals first: the sections stay hidden until they run. data-started tells
+// the inline script in the page head not to reveal everything itself.
 initReveal();
-initCopy();
-initNav();
-initSchedule();
-startWater($('#water'), { slices: 16 });
-startWater($('#water-cta'), { slices: 16, band: 0.36 });
-initImpact();
+document.documentElement.setAttribute('data-started', '');
+// One part failing (a renamed element, no canvas) must not stop the others.
+for (const start of [
+  initLinks,
+  initCopy,
+  initNav,
+  initSchedule,
+  () => startWater($('#water'), { slices: 16 }),
+  () => startWater($('#water-cta'), { slices: 16, band: 0.36 }),
+  initImpact,
+]) {
+  try {
+    start();
+  } catch (err) {
+    console.error(err);
+  }
+}
