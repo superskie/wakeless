@@ -17,8 +17,13 @@ const KELVIN = 0.36; // tan(19.5 degrees), the half-angle of a ship's wake
  * @param {number} [options.slices] how many slices cross after the swap
  * @param {number} [options.band] share of the canvas height the water fills;
  *   by default a band along the bottom sized for the desk's hero
+ * @param {number} [options.at] draw this one moment of the loop (seconds) and
+ *   do not animate; used to render still images such as the link card
+ * @param {number} [options.labelSize] label size in px, for stills shown small
+ * @param {number} [options.scale] size of the bars and the wake; by default
+ *   it follows the width, between 0.6 and 1
  */
-export function startWater(canvas, { slices = 16, band = null } = {}) {
+export function startWater(canvas, { slices = 16, band = null, at = null, labelSize = null, scale = null } = {}) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -82,7 +87,7 @@ export function startWater(canvas, { slices = 16, band = null } = {}) {
     // One slow loop, the same length at any width: the swap takes 24 seconds
     // to cross, its wake settles, then the slices drift across over about 16.
     const lane = 0.62;
-    const k = Math.min(1, Math.max(0.6, width / 1200));
+    const k = scale ?? Math.min(1, Math.max(0.6, width / 1200));
     const speed = (width + 160) / 24;
     const cross = (width + 160) / speed;
     const sliceStart = cross + 3;
@@ -105,7 +110,7 @@ export function startWater(canvas, { slices = 16, band = null } = {}) {
     canvas.height = Math.max(1, Math.round(height * dpr));
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     build();
-    draw(reduce ? story.cross + 22 : performance.now() / 1000);
+    draw(at ?? (reduce ? story.cross + 22 : performance.now() / 1000));
   }
 
   const lineY = (line, x, t) => line.y + Math.sin(x * line.freq + line.phase + t * line.speed) * line.amp;
@@ -162,7 +167,7 @@ export function startWater(canvas, { slices = 16, band = null } = {}) {
       }
     }
 
-    ctx.font = `500 ${k < 0.8 ? 10 : 11}px "Geist Mono", ui-monospace, monospace`;
+    ctx.font = `500 ${labelSize ?? (k < 0.8 ? 10 : 11)}px "Geist Mono", ui-monospace, monospace`;
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign = 'left';
     const label = (text, x, y) => {
@@ -215,6 +220,6 @@ export function startWater(canvas, { slices = 16, band = null } = {}) {
     onScreen = entries.some((e) => e.isIntersecting);
   }).observe(canvas);
   resize();
-  if (document.fonts) document.fonts.ready.then(() => reduce && draw(story.cross + 22));
-  if (!reduce) requestAnimationFrame(frame);
+  if (document.fonts) document.fonts.ready.then(() => (at != null ? draw(at) : reduce && draw(story.cross + 22)));
+  if (!reduce && at == null) requestAnimationFrame(frame);
 }

@@ -48,6 +48,8 @@ function walk(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => {
     if (d.name.startsWith('.')) return [];
     const p = path.join(dir, d.name);
+    // web/dev/ holds pages that render images for the repo (the link card); they never ship.
+    if (d.isDirectory() && p === path.join(ROOT, 'web', 'dev')) return [];
     return d.isDirectory() ? walk(p) : [p];
   });
 }
