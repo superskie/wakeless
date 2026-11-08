@@ -23,7 +23,7 @@ moment ([raw quotes](research/impact/), one file per pair and time):
 | USDC (Arbitrum) to SOL | 5 Nov 2026, 02:30 | +8.9 bps | +24.5 bps | no quote |
 | USDC (Arbitrum) to SOL | 7 Nov 2026, 07:51 | +5.7 bps | +8.7 bps | no quote |
 | ETH (Ethereum) to SOL | 7 Nov 2026, 07:51 | +9.4 bps | +13.0 bps | no quote |
-| USDC (Solana) to ETH (Ethereum) | 7 Nov 2026, 07:51 | +4.1 bps | +7.3 bps | +18.1 bps |
+| USDC (Solana) to ETH (Ethereum) | 7 Nov 2026, 07:51-07:52 | +4.1 bps | +7.3 bps | +18.1 bps |
 
 "No quote" is 1Click answering "No liquidity available": above what the
 solvers fill at once, one swap does not happen at all. The penalty moves with
@@ -69,16 +69,20 @@ Needs Node 22 or later. No keys, no funds, no dependencies to install.
 git clone https://github.com/superskie/wakeless && cd wakeless
 ```
 
-**Do** `npm test`. **See** 81 passing tests: schedule totals are exact to the
+**Do** `npm test`. **See** 171 passing tests: schedule totals are exact to the
 base unit, no fill is ever below the floor, oversized slices split until they
-clear, the report math matches a hand-computed case, and live mode, run
-against an Agent API double, submits each slice once, in confidential form,
-with the floor as its minimum output, and stops when it should. The
-pre-trade check picks the fewest slices that fit and is not fooled by one
-lucky quote, and the exit check flags an address with history. For live mode
-on the hosted desk: keccak-256 and the `personal_sign` signer recovery match
-known vectors, and the site's proxy forwards only the desk's own calls and
-refuses any wallet, grant or intent outside the hosted rules.
+clear (at most three deep), the report math matches a hand-computed case, and
+live mode, run against an Agent API double, submits each slice once, in
+confidential form, with the floor as its minimum output, and stops when it
+should. An upstream that executes a swap and loses every reply still gets
+each slice exactly once, and a laptop that sleeps through the window expires
+the late slices instead of firing them back to back. The pre-trade check
+picks the fewest slices that fit and is not fooled by one lucky quote, and
+the exit check flags an address with history. For live mode on the hosted
+desk: keccak-256 and the `personal_sign` signer recovery match known vectors,
+the page refuses to sign an owner intent that differs from what it asked
+for, and the site's proxy forwards only the desk's own calls and refuses any
+wallet, grant or intent outside the hosted rules, field by field.
 
 **Do** `npm run impact`. **See** live 1Click quotes for $1,000 to $1,000,000
 of USDC (Arbitrum) to SOL (Solana). Cost rises with size, and the largest size
@@ -91,8 +95,7 @@ pre-trade check with live quotes: the order cut into 1 to 64 slices, the size
 penalty of each slice size against a $1,000 swap quoted the same minute, and
 advice. The advice is the fewest slices from which every larger count tried
 stays within 2 bps of the $1,000 swap, or one swap when the whole order
-already does. One quote per size is noisy (on 7 November the same 16-slice
-size read +1.8 bps and, a minute later, +17.4 bps), which is why one lucky
+already does. One quote per size is noisy, which is why one lucky
 reading cannot set the advice. Last, the three things the public chain shows
 when the order runs live: one deposit, nothing during, one withdrawal.
 
@@ -218,7 +221,10 @@ public RPC (Base, Ethereum, Arbitrum) and says what a withdrawal to it would
 link the order to. An address that has sent transactions, such as the wallet
 that paid in, ties the way out to its history; one with no outgoing
 transactions and no ETH has none the RPC can see. It warns and does not
-refuse. The live run below withdrew to the wallet that made the deposit, and
+refuse. The check itself shows that RPC the exit address together with your
+IP, so `--rpc <url>` sends it to an RPC you run or trust and `--no-check`
+skips it; nothing is signed until you add `--confirm`.
+The live run below withdrew to the wallet that made the deposit, and
 the check flags that wallet: it has sent 2 transactions on Base.
 
 Built and checked on the hackathon demo deployment
@@ -243,10 +249,10 @@ before the partner portal (`naa_...`) are refused with `api_key_retired`, and
 ```sh
 cd live && npm install && cd ..
 node live/agent.mjs owner     # throwaway owner key, written to .env
-node live/agent.mjs create    # agent with the policy above
+node live/agent.mjs create    # swap-only agent (allow-withdraw adds withdraw and the address)
 node live/agent.mjs grant     # the desk's grant token, written to .env
 node live/agent.mjs quote nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near nep141:sol.omft.near 10000000
-node live/agent.mjs allow-withdraw base <your address>   # owner signs: withdrawals only there
+node live/agent.mjs allow-withdraw base <your address> --confirm   # owner signs: withdrawals only there
 node live/agent.mjs withdraw nep141:base.omft.near 1000000000000000 base <your address>   # dry preview
 ```
 
@@ -266,9 +272,12 @@ The desk stops instead of guessing: a preview warning (such as
 `insufficient_balance` or `spend_budget_exceeded`), a hard refusal, a status
 that needs a person (`UNCERTAIN`, `NEEDS_REVIEW`, `PENDING_*`), a swap with
 no settled status after 3 minutes, or 3 unfilled attempts in a row. A refunded
-or failed swap is tried again later under a new idempotency key, like a slice
-below the floor; a network error is retried under the same key, so it can not
-trade twice.
+swap, or a failed one the API marks as never executed, goes again later under
+a new idempotency key, like a slice below the floor. Any other unclear submit
+(no answer, a 5xx, a conflict) is retried only under the same key; if that
+does not settle it, the desk stops with `UNKNOWN` and the key to look up, so a
+slice can not trade twice. A live run also needs a daily limit on the sold
+asset equal to the order.
 
 **Do** `node live/run.mjs examples/live-usdc-base-to-sol.json --speed 3`.
 **See** 12 USDC (Base) to SOL worked in 4 slices through the agent, each priced
@@ -283,8 +292,8 @@ Live: `node live/run.mjs <order.json> --live --confirm`. It refuses to start
 unless the agent's confidential balance covers the order and the wallet's
 policy caps the swap size at one slice (next section). To fund it,
 `node live/agent.mjs deposit <asset> <amount>` asks for a deposit address with
-`confidential: true`, and `node live/agent.mjs shield <asset> <amount>` moves a
-public balance over.
+`confidential: true`, and `node live/agent.mjs shield <asset> <amount> --confirm`
+moves a public balance over (without `--confirm` it only previews).
 
 ### The wallet enforces the slicing
 
@@ -369,20 +378,35 @@ of a key in `.env`. Choose Live in the order ticket:
    from which the page recovers the wallet's public key (the Agent API wants it
    for an EVM owner, `src/evm.mjs`); `agent_create` with the policy below; and
    `grant_issue` for this tab, valid for the order plus an hour. The API builds
-   the EIP-712 payloads and the wallet signs them unchanged with
-   `eth_signTypedData_v4`; their domain has no chain id, so the wallet does not
-   switch networks.
+   the EIP-712 payloads; before the wallet sees one, the page checks it against
+   its own request (type, agent, signer, domain, and the policy or the grant's
+   commitment and expiry) and shows the API's summary. The wallet signs with
+   `eth_signTypedData_v4`; the domain has no chain id, so the wallet does not
+   switch networks. After `agent_create` the page reads the policy back and
+   goes on only if it is exactly the one signed.
 4. Fund it: send exactly the order amount to the confidential deposit address,
-   from any wallet or exchange. On an EVM chain the page offers to send it from
-   the connected wallet. The step shows the balance once it lands.
+   from any wallet or exchange. The page shows the address only if the Agent
+   API's answer credits this agent's account, for this asset and amount, in
+   confidential form. Nothing outside the Agent API can confirm the address
+   itself (1Click's status endpoint does not know these addresses), so it comes
+   from the API through this site's proxy. On an EVM chain the page offers to
+   send it from the connected wallet, once, with the chain id set; the
+   deposit's status and any refund in the public balance are shown.
 5. Work the order: the engine, quote client and executor of `live/run.mjs`, in
-   real time, in this tab.
+   real time, in this tab. A funded wallet can run again after a reload or a
+   Stop: the page plans the run from what the wallet holds, within the signed
+   caps, and signs a new grant if the old one would end first. Stop ends the
+   run before its next slice.
 6. Withdraw the bought asset to the receive address, and return anything
-   unsold.
+   unsold. A return above one slice goes out in parts of at most the
+   per-transaction limit, which also applies to withdrawals; the daily limit
+   can hold the rest for up to a day. These buttons never depend on the token
+   price.
 
 Freeze and Unfreeze are owner intents as well. A frozen wallet runs no swap
 and no withdrawal (`409 wallet_frozen`), so taking funds out after a freeze
-needs an unfreeze first.
+needs an unfreeze first. Freeze works while an order runs, and the button
+follows the wallet's frozen state read from the API.
 
 The policy a hosted order gets (`src/agent/hosted.mjs`):
 
@@ -390,6 +414,7 @@ The policy a hosted order gets (`src/agent/hosted.mjs`):
 {
   "actions": ["swap", "withdraw"],
   "confidential": true,
+  "assets": ["<sold asset>", "<bought asset>"],
   "limits": {
     "per_transaction": { "<sold asset>": "<largest slice the order can draw>" },
     "daily": { "<sold asset>": "<the order>" }
@@ -408,7 +433,12 @@ handler in `src/agent/proxy.mjs`) adds the key from a Pages secret. It forwards
 only the ten calls the desk makes. It refuses owner intents that break the
 hosted rules: an order above $50 at the Agent API's price, a grant longer than
 24 hours, any action but swap and withdraw, more than two destinations, a
-budget above $150. It also refuses swaps and withdrawals that are not
+budget above $150, or any field outside these rules. The proxy values the
+order at the Agent API's token price, read up to five minutes earlier, and
+allows 25% drift from the ticket's 1Click price, so the hard server-side bound
+is $62.50 of the sold asset per wallet per day; whatever the per-asset limits
+do not cover stays inside the $150 daily budget. It also refuses swaps and
+withdrawals that are not
 confidential, and limits each client address (best effort: each edge instance
 counts on its own). `npm run web` runs the same handler with the key from
 `.env`, and `npm test` covers its rules (`test/proxy.test.mjs`,
