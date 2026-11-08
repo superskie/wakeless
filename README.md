@@ -1,3 +1,5 @@
+[![Wakeless: big trades, no wake. One swap of a whole order leaves a wake; the same order as 16 slices leaves none.](brand/wakeless-banner.png)](https://wakeless.pages.dev)
+
 # Wakeless
 
 Works a large cross-chain swap in randomized slices through NEAR Intents, so
@@ -6,6 +8,9 @@ trade against. A large order leaves a wake; the name is the goal.
 
 Built at NEAR HACKATHON (1 to 14 November 2026). Tracks: Unstoppable DeFi
 (`defi`), Agent Economy (`agents`), Privacy & Private AI (`privacy`).
+
+**Live:** [wakeless.pages.dev](https://wakeless.pages.dev), the desk at
+[wakeless.pages.dev/web](https://wakeless.pages.dev/web/).
 
 ## The problem
 

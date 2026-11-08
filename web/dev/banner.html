@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Wakeless README banner</title>
+  <!--
+    Renders the README banner from the landing page's own water scene, fonts
+    and colours, like og.html does for the link card. Not shipped:
+    scripts/build-site.mjs skips web/dev/.
+    Re-render: npm run web, open /web/dev/banner.html at device scale 2, wait
+    for body[data-ready], capture #banner (1280 x 440) as PNG to
+    brand/wakeless-banner.png.
+  -->
+  <link rel="stylesheet" href="/web/fonts.css">
+  <style>
+    :root { --bg: #07090c; --ink: #edf2f7; --ink-2: #b3becb; --quiet: #5ee0c1; --line-2: rgba(226, 236, 245, 0.13); }
+    body { margin: 0; padding: 40px; background: #000; display: grid; justify-content: start; }
+    .banner {
+      position: relative;
+      width: 1280px;
+      height: 440px;
+      overflow: hidden;
+      background: radial-gradient(1000px 420px at 78% -18%, rgba(94, 224, 193, 0.1), transparent 62%), var(--bg);
+      color: var(--ink);
+      font-family: "Geist", system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    .banner canvas { position: absolute; top: 0; bottom: 0; width: 50%; height: 100%; }
+    .banner .l { left: 0; }
+    .banner .r { right: 0; }
+    .banner .divider { position: absolute; left: 50%; bottom: 0; height: 33%; width: 1px; background: linear-gradient(180deg, transparent, var(--line-2)); }
+    .copy { position: absolute; left: 64px; top: 44px; right: 64px; }
+    .lockup { display: flex; align-items: center; gap: 12px; }
+    .lockup img { width: 38px; height: 38px; }
+    .lockup span { font: 400 31px/1 "Instrument Serif", Georgia, serif; }
+    h1 { margin: 30px 0 0; font: 400 92px/0.9 "Instrument Serif", Georgia, serif; letter-spacing: -0.025em; white-space: nowrap; }
+    h1 em { color: var(--quiet); font-style: italic; text-shadow: 0 0 44px rgba(94, 224, 193, 0.28); }
+    .sub { margin: 18px 0 0; color: var(--ink-2); font-size: 22px; line-height: 1.35; letter-spacing: -0.005em; }
+  </style>
+</head>
+<body>
+  <!-- Left: one swap of the whole order crosses and leaves its wake.
+       Right: the same order as 16 slices crossing flat water. -->
+  <div class="banner" id="banner">
+    <canvas class="l" data-at="16.5"></canvas><canvas class="r" data-at="40"></canvas><i class="divider"></i>
+    <div class="copy">
+      <div class="lockup"><img src="/web/favicon.svg" alt=""><span>Wakeless</span></div>
+      <h1>Big trades. <em>No wake.</em></h1>
+      <p class="sub">A large cross-chain swap, worked as random confidential slices through NEAR Intents.</p>
+    </div>
+  </div>
+
+  <script type="module">
+    import { startWater } from '/web/water.mjs';
+    await document.fonts.ready;
+    for (const canvas of document.querySelectorAll('.banner canvas')) {
+      startWater(canvas, { band: 0.33, at: Number(canvas.dataset.at), labelSize: 18, scale: 1.2 });
+    }
+    await Promise.all([...document.images].map((img) => img.decode().catch(() => {})));
+    requestAnimationFrame(() => requestAnimationFrame(() => { document.body.dataset.ready = '1'; }));
+  </script>
+</body>
+</html>

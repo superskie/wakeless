@@ -21,6 +21,7 @@ depends on an installed font.
 | `wakeless-wordmark.svg`, `wakeless-wordmark-on-light.svg` | "Wakeless" in Instrument Serif 400, outlined |
 | `wakeless-lockup.svg`, `wakeless-lockup-on-light.svg` | icon + wordmark in the site header's proportions (26 px tile, 24 px type, 10 px gap) |
 | `x/wakeless-x-avatar.png` | X profile photo, 800×800, full bleed for the circle crop |
+| `wakeless-banner.png` | README banner, 2560×880 (1280×440 at 2x), rendered from `web/dev/banner.html` with the landing's water scene |
 
 On the site: `web/favicon.svg` (copy of the icon), `web/favicon.ico` (16, 32, 48 px),
 `web/apple-touch-icon.png` (180 px, full bleed), and the mark's path inline in the header of
