@@ -9,7 +9,7 @@ import { capFor } from '../src/agent/cap.mjs';
 import { toDeskTokens } from '../src/agent/quotes.mjs';
 import { largestPossibleSlice } from '../src/schedule.mjs';
 import { prepareOrder } from '../src/order.mjs';
-import { createLive, liveSpec, planChunks, planRemainder } from '../web/live.mjs';
+import { createLive, liveSpec, planChunks, planRemainder, receiveNote, slicesThatFit } from '../web/live.mjs';
 
 // ---------- a throwaway secp256k1 signer for personal_sign ----------
 
@@ -341,6 +341,25 @@ async function reload(t, d, { connect = false } = {}) {
 }
 
 // ---------- planners ----------
+
+test('the receive address may be any wallet, and the connected one gets a note', () => {
+  const connected = `0x${'ab'.repeat(20)}`;
+  const other = `0x${'cd'.repeat(20)}`;
+  assert.equal(receiveNote('base', other, connected).tone, '');
+  assert.match(receiveNote('base', other, connected).text, /another wallet than the connected one/);
+  assert.equal(receiveNote('arb', connected.toUpperCase().replace('0X', '0x'), connected).tone, 'note');
+  assert.match(receiveNote('arb', connected, connected).text, /share one public address/);
+  assert.equal(receiveNote('base', other, null).tone, '');
+  // Solana addresses are case-sensitive and never equal an EVM account.
+  assert.equal(receiveNote('sol', '9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin', connected).tone, '');
+});
+
+test('a short window fits only the slices that can settle in it', () => {
+  assert.equal(slicesThatFit(2 * 60_000), 4);
+  assert.equal(slicesThatFit(3 * 60_000), 6);
+  assert.equal(slicesThatFit(10 * 60_000), 20);
+  assert.equal(slicesThatFit(29_999), 0);
+});
 
 test('a return is split into parts the per-transaction limit allows', () => {
   assert.deepEqual(planChunks(10n, 4n), [4n, 3n, 3n]);

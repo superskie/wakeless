@@ -69,7 +69,7 @@ Needs Node 22 or later. No keys, no funds, no dependencies to install.
 git clone https://github.com/superskie/wakeless && cd wakeless
 ```
 
-**Do** `npm test`. **See** 171 passing tests: schedule totals are exact to the
+**Do** `npm test`. **See** 173 passing tests: schedule totals are exact to the
 base unit, no fill is ever below the floor, oversized slices split until they
 clear (at most three deep), the report math matches a hand-computed case, and
 live mode, run against an Agent API double, submits each slice once, in
@@ -373,7 +373,10 @@ of a key in `.env`. Choose Live in the order ticket:
    rules and pays no gas.
 2. Name a receive address on the bought asset's chain, and a return address on
    the sold asset's chain for anything unsold. They become the wallet's only
-   two withdrawal destinations.
+   two withdrawal destinations. Either may be another wallet than the
+   connected one or the one that pays in; the page notes when the receive
+   address is the connected wallet, since a wallet that pays in and receives
+   puts the deposit and the withdrawal on one public address.
 3. Create the agent wallet with three signatures: a `personal_sign` sign-in,
    from which the page recovers the wallet's public key (the Agent API wants it
    for an EVM owner, `src/evm.mjs`); `agent_create` with the policy below; and

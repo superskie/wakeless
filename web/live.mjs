@@ -125,6 +125,29 @@ function resolveOrder(spec, tokens) {
 }
 
 /**
+ * A live slice settled in 17 to 22 s in the 8 Nov run from the site, so each
+ * gets at least 30 s of the window; more slices than that would expire unsold.
+ */
+export const MIN_SLICE_GAP_MS = 30_000;
+export const slicesThatFit = (horizonMs) => Math.floor(horizonMs / MIN_SLICE_GAP_MS);
+
+/**
+ * The hint under a valid receive address. It may be any wallet; the same
+ * address as the connected one gets a note, since if that wallet also pays in,
+ * the deposit and the withdrawal share one public address.
+ */
+export function receiveNote(chain, address, account) {
+  const check = 'Check it against your wallet popup.';
+  if (account && canonicalAddress(chain, address) === account.toLowerCase()) {
+    return {
+      tone: 'note',
+      text: `This is the connected wallet. If it also pays in, the deposit and the withdrawal share one public address, so anyone can tie the two. Another address you control avoids that. ${check}`,
+    };
+  }
+  return { tone: '', text: `The only place the bought asset can go. It may be another wallet than the connected one or the one that pays in. ${check}` };
+}
+
+/**
  * Parts of at most `perTx` each, as equal as possible: the Agent API applies a
  * per-asset per-transaction limit to withdrawals too, so a return of more than
  * one slice must go out in several.
@@ -234,6 +257,8 @@ export function createLive({ ticket, contractOf, lockTicket, workOrder, oneClick
     const usd = toNumber(order.totalUnits, order.sell.decimals) * order.sell.price;
     if (usd > HOSTED.maxOrderUsd) return { error: `Live orders are capped at $${HOSTED.maxOrderUsd}; this one is about $${usd.toFixed(2)}.` };
     if (order.slices < HOSTED.minSlices) return { error: 'A live order needs at least 2 slices.' };
+    const fit = slicesThatFit(order.horizonMs);
+    if (order.slices > fit) return { error: `A live slice takes about 20 seconds to settle, so ${order.horizonMs / 60_000} minutes fit at most ${fit} slices.` };
     if (!RECEIVE_CHAINS.has(order.buy.blockchain)) return { error: `Withdrawals to ${chainName(order.buy.blockchain)} are not supported.` };
     try {
       return { order, spec, usd, cap: capFor(order) };
@@ -303,7 +328,11 @@ export function createLive({ ticket, contractOf, lockTicket, workOrder, oneClick
     const rc = check(receive, buy?.blockchain);
     const fc = check(refund, sell?.blockchain);
     const nearNote = 'An 0x name on NEAR is an account only an EVM wallet can use. Make sure that is what you want.';
-    $('#live-receive-hint').textContent = !rc.ok ? rc.reason : evmOnNear(buy.blockchain, receive.value.trim()) ? nearNote : 'The only place the bought asset can go. Check it against your wallet popup.';
+    const onNear = rc.ok && evmOnNear(buy.blockchain, receive.value.trim());
+    const note = rc.ok && !onNear ? receiveNote(buy.blockchain, receive.value.trim(), mem.account ?? saved?.owner?.address) : null;
+    const receiveHint = $('#live-receive-hint');
+    receiveHint.textContent = !rc.ok ? rc.reason : onNear ? nearNote : note.text;
+    receiveHint.dataset.tone = note?.tone ?? '';
     $('#live-refund-hint').textContent = !fc.ok ? fc.reason : evmOnNear(sell.blockchain, refund.value.trim()) ? nearNote : 'Used only if a slice can not fill. It may be another wallet than the one that pays in.';
     $('#ls-where').dataset.state = made || (rc.ok && fc.ok) ? 'done' : 'todo';
     return { rc, fc };

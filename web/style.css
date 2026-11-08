@@ -442,6 +442,7 @@ body[data-mode="live"] .ticket { position: static; }
 .live .error { margin: 0; }
 .live .error:empty { display: none; }
 .live .hint:empty { display: none; }
+.live .hint[data-tone="note"] { color: var(--wait); }
 .live-summary { white-space: pre-line; }
 .live-stop { justify-self: start; }
 

@@ -43,8 +43,8 @@ const liveMode = (assets, hosted) => ({
   pair: ['eth:base', 'sol:sol'],
   chips: [10, 25, hosted.maxOrderUsd],
   usd: 25,
-  windows: [5, 10, 15, 30],
-  window: 10,
+  windows: [2, 3, 5, 10, 15, 30],
+  window: 3,
   slices: [hosted.minSlices, hosted.maxSlices, 4],
 });
 let liveDesk = null;
