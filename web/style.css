@@ -443,6 +443,9 @@ body[data-mode="live"] .ticket { position: static; }
 .live .error:empty { display: none; }
 .live .hint:empty { display: none; }
 .live .hint[data-tone="note"] { color: var(--wait); }
+.live-locked { display: grid; gap: 8px; justify-items: start; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid rgba(242, 184, 75, 0.35); background: rgba(242, 184, 75, 0.06); }
+.live-locked[hidden] { display: none; }
+.live-locked .hint { color: var(--ink-2); }
 .live-summary { white-space: pre-line; }
 .live-stop { justify-self: start; }
 

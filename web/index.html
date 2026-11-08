@@ -160,6 +160,10 @@
               <label class="btn ghost small live-load" title="Come back to an agent wallet saved earlier">Load saved wallet<input type="file" id="live-load" accept="application/json,.json"></label>
             </div>
             <p class="live-note">Real funds through NEAR Intents, on code with no audit yet. Orders are capped at $50, and your own wallet signs every rule.</p>
+            <div class="live-locked" id="live-locked" hidden>
+              <p class="hint">The ticket and the addresses are locked: the agent wallet made for this order signed them into its rules. Start over for a new order with another amount, window or address.</p>
+              <button class="btn ghost small" type="button" id="live-forget-top">Start over</button>
+            </div>
             <ol class="live-steps">
               <li class="live-step" id="ls-wallet">
                 <p class="live-step-title">Connect a wallet</p>

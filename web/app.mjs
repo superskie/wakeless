@@ -812,6 +812,15 @@ function applyMode(mode) {
   $('#run').hidden = live;
   $('#precheck').hidden = live;
   document.querySelector('.speed').hidden = live;
+  fillTicket(m);
+  if (live) liveDesk.show();
+  else liveDesk?.hide();
+  renderPlan();
+  return true;
+}
+
+/** The mode's default order: pair, amount, window and slices. */
+function fillTicket(m) {
   setChips(m.chips);
   setWindowOptions(m.windows, m.window);
   const [min, max, start] = m.slices;
@@ -829,10 +838,6 @@ function applyMode(mode) {
       showError(`The ticket could not be filled: ${err.message}.`);
     }
   }
-  if (live) liveDesk.show();
-  else liveDesk?.hide();
-  renderPlan();
-  return true;
 }
 
 /** Once an agent wallet exists its signed limits fix the order, so the ticket shows that order and locks. */
@@ -939,6 +944,10 @@ async function loadLive() {
         return token ? token.contractAddress ?? null : undefined;
       },
       lockTicket,
+      resetTicket: () => {
+        fillTicket(MODES.live);
+        renderPlan();
+      },
       workOrder,
       // The desk's own 1Click list, so Live checks assets against it without a second fetch.
       oneClickTokens: () => state.tokens,

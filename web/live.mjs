@@ -192,10 +192,11 @@ class StoppedError extends Error {
  * @param {() => object} p.ticket the ticket's current order fields
  * @param {(assetId: string) => string | null | undefined} p.contractOf EVM token contract, null for a native coin, undefined when not in the 1Click list
  * @param {(spec: object | null) => void} p.lockTicket
+ * @param {() => void} [p.resetTicket] puts the ticket back to the Live defaults after Start over
  * @param {(run: object) => Promise<object[]>} p.workOrder runs the engine in the desk's monitor
  * @param {() => object[] | null} [p.oneClickTokens] the 1Click token list the desk already holds; fetched here when missing
  */
-export function createLive({ ticket, contractOf, lockTicket, workOrder, oneClickTokens }) {
+export function createLive({ ticket, contractOf, lockTicket, resetTicket, workOrder, oneClickTokens }) {
   const api = agentHttp();
   const prices = priceBook(api, { ttlMs: 60_000 });
   const mem = {
@@ -435,6 +436,7 @@ export function createLive({ ticket, contractOf, lockTicket, workOrder, oneClick
     $('#live-foot-hint').textContent = made && !ownerNow ? `Freeze needs the owner wallet, ${short(owner())}, connected.` : '';
     $('#live-save').hidden = !made;
     $('#live-forget').hidden = !made;
+    $('#live-locked').hidden = !made;
     lockTicket(made ? saved.spec : null);
   }
 
@@ -1084,11 +1086,12 @@ export function createLive({ ticket, contractOf, lockTicket, workOrder, oneClick
 
   function forget() {
     const ok = window.confirm('Forget this agent wallet in this browser? Any funds stay in it. Save the wallet details first if you want to come back.');
-    if (!ok) return;
+    if (!ok) return false;
     saved = null;
     Object.assign(mem, { grant: null, balances: null, publicBalances: null, policyView: null, policyCheck: null, depositCheck: null, depositStatus: null, lastRun: null });
     store();
     for (const id of ['#live-sigs', '#live-summary', '#live-out', '#live-sent']) $(id).textContent = '';
+    return true;
   }
 
   /** One poll: the wallet's rules and frozen flag, balances, the agent account and the deposit. */
@@ -1143,10 +1146,17 @@ export function createLive({ ticket, contractOf, lockTicket, workOrder, oneClick
     if (file) act(() => load(file));
     e.target.value = '';
   });
-  $('#live-forget').addEventListener('click', () => {
-    forget();
-    render();
-  });
+  // A new order starts from the Live defaults and empty addresses, not from the forgotten wallet's order.
+  for (const id of ['#live-forget', '#live-forget-top']) {
+    $(id).addEventListener('click', () => {
+      if (!forget()) return;
+      for (const field of ['#live-receive', '#live-refund']) $(field).value = '';
+      mem.autofill = { receive: null, refund: null };
+      render();
+      resetTicket?.();
+      render();
+    });
+  }
   for (const id of ['#live-receive', '#live-refund']) $(id).addEventListener('input', render);
 
   return {
