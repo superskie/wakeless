@@ -53,18 +53,53 @@ test('grant credentials match the SDK format and commitment', async () => {
   await assert.rejects(grantCommitment('ngt_short'), /not a grant token/);
 });
 
-test('an owner intent is generated, signed as-is by the wallet, submitted and followed', async () => {
-  const payload = { domain: { name: 'NEAR Wallet Contract', version: '1' }, types: {}, primaryType: 'WalletMessage', message: { nonce: 1 } };
+// The well-known anvil test account #0; the public key is an obviously fake value.
+const OWNER = '0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266';
+const freezeIntent = () => ({
+  type: 'agent_freeze',
+  agent_id: 'a',
+  correlation_id: 'op_9',
+  signer: { type: 'evm', address: OWNER, chain_id: 1, public_key: `0x${'4b'.repeat(64)}` },
+  intent: { standard: 'eip712', payload: { domain: { name: 'NEAR Wallet Contract', version: '1' }, types: { Request: [{ name: 'message', type: 'string' }] }, primaryType: 'Request', message: { message: '{"agent_id":"a"}' } } },
+  preview: { summary: 'Freeze the agent.' },
+});
+
+test('an owner intent is checked, signed as-is by the wallet, submitted and followed', async () => {
   const seen = [];
   const statuses = ['PROCESSING', 'SUCCESS'];
+  const generated = freezeIntent();
   const api = {
-    generateIntent: async (req) => (seen.push(['generate', req.type]), { type: req.type, correlation_id: 'op_9', intent: { standard: 'eip712', payload } }),
+    generateIntent: async (req) => (seen.push(['generate', req.type]), generated),
     submitIntent: async (body) => seen.push(['submit', body]),
     getStatus: async (id) => ({ correlation_id: id, status: statuses.shift() }),
   };
-  const result = await runOwnerIntent(api, async (p) => (seen.push(['sign', p]), '0xsig'), { type: 'agent_freeze', agent_id: 'a' });
+  const sign = async (p) => (seen.push(['sign', p]), '0xsig');
+  const result = await runOwnerIntent(api, sign, { type: 'agent_freeze', agent_id: 'a' }, { owner: OWNER, onGenerated: (_g, summary) => seen.push(['summary', summary]) });
   assert.equal(result.status, 'SUCCESS');
-  assert.equal(seen[1][1], payload, 'the wallet signs the payload unchanged');
-  assert.deepEqual(seen[2][1], { type: 'agent_freeze', correlation_id: 'op_9', signed_data: { standard: 'eip712', payload, signature: '0xsig' } });
-  await assert.rejects(runOwnerIntent({ ...api, generateIntent: async () => ({ intent: { standard: 'nep413' } }) }, async () => '', {}), /EIP-712/);
+  assert.deepEqual(seen.map(([step]) => step), ['generate', 'summary', 'sign', 'submit']);
+  assert.equal(seen[1][1], 'Freeze the agent.', 'the API summary is handed to the page before the wallet opens');
+  assert.equal(seen[2][1], generated.intent.payload, 'the wallet signs the payload unchanged');
+  assert.deepEqual(seen[3][1], { type: 'agent_freeze', correlation_id: 'op_9', signed_data: { ...generated.intent, signature: '0xsig' } });
+  await assert.rejects(runOwnerIntent(api, sign, { type: 'agent_freeze', agent_id: 'a' }), /owner address/);
+});
+
+test('an owner intent that is not the one asked for never reaches the wallet', async () => {
+  const changes = [
+    ['type', (g) => (g.type = 'agent_unfreeze')],
+    ['agent', (g) => (g.agent_id = 'b')],
+    ['signer', (g) => (g.signer.address = `0x${'12'.repeat(20)}`)],
+    ['domain', (g) => (g.intent.payload.domain.chainId = 1)],
+    ['standard', (g) => (g.intent = { standard: 'nep413', payload: {} })],
+    ['message', (g) => (g.intent.payload.message.message = '{"action":"agent_delete","agent_id":"a"}')],
+  ];
+  for (const [label, change] of changes) {
+    const generated = freezeIntent();
+    change(generated);
+    let signed = 0;
+    const api = { generateIntent: async () => generated, submitIntent: async () => assert.fail('submitted'), getStatus: async () => assert.fail('polled') };
+    const err = await runOwnerIntent(api, async () => (signed++, '0xsig'), { type: 'agent_freeze', agent_id: 'a' }, { owner: OWNER }).catch((e) => e);
+    assert.equal(err?.name, 'OwnerIntentError', label);
+    assert.match(err.message, /not asked to sign/, label);
+    assert.equal(signed, 0, `${label}: nothing was signed`);
+  }
 });

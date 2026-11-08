@@ -46,6 +46,11 @@ export function wallet(provider) {
       if (!account) throw new Error('the wallet returned no account');
       return account.toLowerCase();
     },
+    /** The accounts the wallet exposes right now, without a prompt. */
+    async accounts() {
+      const list = await request('eth_accounts');
+      return Array.isArray(list) ? list.map((a) => String(a).toLowerCase()) : [];
+    },
     async chainId() {
       return Number.parseInt(await request('eth_chainId'), 16);
     },
@@ -71,17 +76,25 @@ export function wallet(provider) {
       }
       if ((await this.chainId()) !== c.id) throw new Error(`switch the wallet to ${c.name} and try again`);
     },
-    /** Native coin when `token` is null, otherwise an ERC-20 transfer. Returns the transaction hash. */
+    /**
+     * Native coin when `token` is null, otherwise an ERC-20 transfer. Returns
+     * the transaction hash. The chain id rides in the transaction too, so a
+     * wallet that changed network after the switch refuses it instead of
+     * paying the same address on another chain.
+     */
     async send({ from, chain, to, amount, token }) {
       await this.switchTo(chain);
       const value = BigInt(amount);
+      const chainId = `0x${EVM_CHAIN[chain].id.toString(16)}`;
       const tx = token
-        ? { from, to: token, data: erc20TransferData(to, value), value: '0x0' }
-        : { from, to, value: `0x${value.toString(16)}` };
+        ? { from, to: token, data: erc20TransferData(to, value), value: '0x0', chainId }
+        : { from, to, value: `0x${value.toString(16)}`, chainId };
       return request('eth_sendTransaction', [tx]);
     },
+    /** Returns a function that removes the listener again. */
     on(event, handler) {
       provider.on?.(event, handler);
+      return () => provider.removeListener?.(event, handler);
     },
   };
 }

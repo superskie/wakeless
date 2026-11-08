@@ -441,6 +441,9 @@ body[data-mode="live"] .ticket { position: static; }
 .live .hint a { color: var(--quiet); }
 .live .error { margin: 0; }
 .live .error:empty { display: none; }
+.live .hint:empty { display: none; }
+.live-summary { white-space: pre-line; }
+.live-stop { justify-self: start; }
 
 @media (max-width: 1080px) {
   .desk { grid-template-columns: minmax(0, 1fr); }
@@ -488,3 +491,7 @@ select { min-width: 0; text-overflow: ellipsis; }
   html { scroll-behavior: auto; }
   .js .reveal { opacity: 1; transform: none; }
 }
+
+/* The mode toggle is locked while a run or a replay is busy. */
+.segmented input:disabled + span { opacity: 0.5; }
+.segmented label:has(input:disabled) { cursor: default; }

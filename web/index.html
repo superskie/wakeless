@@ -25,7 +25,16 @@
   <link rel="preload" href="fonts/InstrumentSerif-400.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/InstrumentSerif-400i.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/Geist-var.woff2" as="font" type="font/woff2" crossorigin>
-  <script>document.documentElement.classList.add('js');</script>
+  <script>
+    // .reveal blocks start hidden and the page module shows them as they scroll in. If the module
+    // never starts (a failed import, an old browser), show them all after a few seconds instead.
+    document.documentElement.classList.add('js');
+    setTimeout(function () {
+      if (document.documentElement.hasAttribute('data-started')) return;
+      var blocks = document.querySelectorAll('.reveal');
+      for (var i = 0; i < blocks.length; i++) blocks[i].classList.add('in');
+    }, 4000);
+  </script>
   <link rel="stylesheet" href="fonts.css">
   <link rel="stylesheet" href="style.css">
   <script type="module" src="app.mjs"></script>
@@ -180,23 +189,29 @@
                   <button class="btn small" type="button" id="live-regrant" hidden>Sign a grant for this tab</button>
                 </div>
                 <ol class="live-sigs" id="live-sigs"></ol>
+                <p class="hint live-summary" id="live-summary"></p>
               </li>
               <li class="live-step" id="ls-fund">
                 <p class="live-step-title">Fund it</p>
                 <div class="live-fund" id="live-fund" hidden>
                   <p class="hint" id="live-send"></p>
                   <code class="live-address" id="live-deposit"></code>
+                  <p class="hint" id="live-memo"></p>
                   <div class="live-row">
                     <button class="btn ghost small" type="button" id="live-copy">Copy address</button>
                     <button class="btn small" type="button" id="live-send-wallet" hidden>Send from this wallet</button>
+                    <button class="btn ghost small" type="button" id="live-send-again" hidden>Send again</button>
+                    <button class="btn small" type="button" id="live-get-deposit" hidden>Get the deposit address</button>
                   </div>
                   <p class="hint" id="live-sent"></p>
                   <p class="hint" id="live-balance"></p>
+                  <p class="hint" id="live-public"></p>
                 </div>
               </li>
               <li class="live-step" id="ls-run">
                 <p class="live-step-title">Work the order</p>
                 <button class="btn primary" type="button" id="live-run">Work this order live</button>
+                <button class="btn ghost small live-stop" type="button" id="live-stop" hidden>Stop</button>
                 <p class="hint" id="live-run-hint"></p>
               </li>
               <li class="live-step" id="ls-out">
@@ -206,6 +221,7 @@
                   <button class="btn ghost small" type="button" id="live-return" hidden>Return</button>
                 </div>
                 <p class="hint" id="live-out"></p>
+                <p class="hint" id="live-out-hint"></p>
               </li>
             </ol>
             <div class="live-row live-foot">
@@ -213,6 +229,7 @@
               <button class="btn ghost small" type="button" id="live-save" hidden>Save wallet details</button>
               <button class="btn ghost small" type="button" id="live-forget" hidden>Start over</button>
             </div>
+            <p class="hint" id="live-foot-hint"></p>
             <p class="error" id="live-error" role="alert"></p>
           </section>
 

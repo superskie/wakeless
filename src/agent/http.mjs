@@ -3,15 +3,21 @@
 // Method names, arguments and error fields follow the official SDK, so the
 // executor and the quote client in src/ run on it unchanged.
 import { waitForStatus } from './status.mjs';
+import { checkOwnerIntent } from './verify.mjs';
 
 export class AgentHttpError extends Error {
-  constructor(status, document) {
+  constructor(status, document, { retryAfter = null } = {}) {
     const first = document?.errors?.[0];
     super(first?.detail ?? first?.title ?? `HTTP ${status}`);
     this.name = 'AgentHttpError';
     this.status = status;
     this.code = first?.code ?? 'http_error';
     this.layer = first?.layer;
+    // The same fields as the SDK's error, so the executor and the status
+    // poller read them without knowing which client they run on.
+    this.retryable = first?.meta?.retryable === true;
+    const seconds = Number(retryAfter);
+    this.retryAfterSeconds = retryAfter !== null && Number.isFinite(seconds) && seconds >= 0 ? seconds : null;
     this.document = document;
   }
 }
@@ -59,7 +65,7 @@ export function agentHttp({ base = '/api/agent', fetch: fetcher = (...a) => glob
     } catch {
       json = null;
     }
-    if (!res.ok) throw new AgentHttpError(res.status, json);
+    if (!res.ok) throw new AgentHttpError(res.status, json, { retryAfter: res.headers?.get?.('retry-after') ?? null });
     return idempotencyKey && json && typeof json === 'object' ? { ...json, idempotencyKey } : json;
   }
 
@@ -86,13 +92,32 @@ export function agentHttp({ base = '/api/agent', fetch: fetcher = (...a) => glob
   };
 }
 
-/** generate, have the owner's wallet sign, submit, then follow the status. */
-export async function runOwnerIntent(api, signTypedData, request, { onGenerated } = {}) {
+/** An owner intent the page will not put in front of the wallet. */
+export class OwnerIntentError extends Error {
+  constructor(reason) {
+    super(`The wallet was not asked to sign: ${reason}.`);
+    this.name = 'OwnerIntentError';
+  }
+}
+
+/**
+ * Generate, check, have the owner's wallet sign, submit, then follow the
+ * status. The generated intent is compared with the request before the wallet
+ * sees it (checkOwnerIntent), since the proxy and the API sit between the page
+ * and the wallet; `onGenerated` gets the API's own summary to show.
+ * @param {{ owner: string, onGenerated?: (generated: object, summary: string | null) => void }} p
+ */
+export async function runOwnerIntent(api, signTypedData, request, { owner, onGenerated } = {}) {
+  if (!owner) throw new Error('runOwnerIntent needs the owner address to check the intent');
   const generated = await api.generateIntent(request);
-  const { intent } = generated;
-  if (intent?.standard !== 'eip712') throw new Error(`expected an EIP-712 intent, got ${intent?.standard}`);
-  onGenerated?.(generated);
-  const signature = await signTypedData(intent.payload);
-  await api.submitIntent({ type: generated.type, correlation_id: generated.correlation_id, signed_data: { ...intent, signature } });
-  return waitForStatus(api, generated.correlation_id);
+  const check = checkOwnerIntent(request, generated, { owner });
+  if (!check.ok) throw new OwnerIntentError(check.reason);
+  onGenerated?.(generated, check.summary);
+  const signature = await signTypedData(generated.intent.payload);
+  await api.submitIntent({ type: request.type, correlation_id: generated.correlation_id, signed_data: { ...generated.intent, signature } });
+  const status = await waitForStatus(api, generated.correlation_id);
+  if (request.type === 'agent_create' && status.agent_id && generated.agent_id && status.agent_id !== generated.agent_id) {
+    throw new OwnerIntentError('the wallet made is not the one that was signed for');
+  }
+  return status;
 }
