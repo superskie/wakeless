@@ -447,10 +447,6 @@ body[data-mode="live"] .ticket { position: static; }
   .ticket { position: static; }
   .monitor-body.has-result { grid-template-columns: 1fr; }
 }
-/* Below about 790px the X link wraps the status chip onto two lines; the landing's footer keeps it. */
-@media (max-width: 900px) {
-  .topnav .topnav-x { display: none; }
-}
 @media (max-width: 760px) {
   .topnav { display: none; }
   .topbar { gap: 12px; }

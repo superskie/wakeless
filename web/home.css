@@ -447,8 +447,9 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border-radius
 .foot-line em { color: var(--quiet); }
 .foot-meta { display: grid; gap: 6px; max-width: 34em; color: var(--muted); font-size: 13px; text-align: right; }
 .foot-meta p { margin: 0; }
-.foot-meta a { white-space: nowrap; }
-.foot-meta a { color: var(--ink-2); text-underline-offset: 3px; }
+.foot-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0 22px; margin-bottom: 4px; font-size: 14px; }
+.foot-links a { padding: 6px 0; color: var(--ink); text-decoration: none; transition: color 0.2s; }
+.foot-links a:hover { color: var(--quiet); }
 
 /* Reveal on scroll; content stays visible without JavaScript. */
 html.js .reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.8s var(--ease), transform 0.8s var(--ease); transition-delay: var(--d, 0ms); }
@@ -476,6 +477,7 @@ html.js .reveal.in { opacity: 1; transform: none; }
   .proof li:nth-child(3) { border-left: 0; }
   .proof li:nth-child(n + 3) { border-top: 1px solid var(--line); }
   .foot-meta { text-align: left; }
+  .foot-links { justify-content: flex-start; }
 }
 @media (max-width: 640px) {
   .limits, .proof { grid-template-columns: minmax(0, 1fr); }
