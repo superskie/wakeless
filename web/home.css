@@ -447,6 +447,7 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border-radius
 .foot-line em { color: var(--quiet); }
 .foot-meta { display: grid; gap: 6px; max-width: 34em; color: var(--muted); font-size: 13px; text-align: right; }
 .foot-meta p { margin: 0; }
+.foot-meta a { white-space: nowrap; }
 .foot-meta a { color: var(--ink-2); text-underline-offset: 3px; }
 
 /* Reveal on scroll; content stays visible without JavaScript. */
