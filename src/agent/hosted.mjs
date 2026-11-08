@@ -2,7 +2,8 @@
 // agent's policy with them, and the site's proxy refuses any owner intent that
 // breaks them, so a modified page can not use the site's partner key to make a
 // bigger wallet. These are mainnet funds on unaudited code: small on purpose.
-import { hasValidChecksum, isEvmAddress } from '../evm.mjs';
+import { hasValidChecksum, isEvmAddress, publicKeyToAddress } from '../evm.mjs';
+import { largestPossibleSlice } from '../schedule.mjs';
 
 export const HOSTED = {
   /** The largest order, valued at the Agent API's token price. */
@@ -18,6 +19,26 @@ export const HOSTED = {
   /** Where funds may leave to: the receive address, and a refund address on the sell chain. */
   maxDestinations: 2,
 };
+
+/** How old the Agent API token price behind the proxy's order check may be. */
+export const PRICE_MAX_AGE_MS = 5 * 60_000;
+
+/**
+ * The hard bound the proxy enforces: it refuses a wallet whose daily limit on
+ * the sold asset is worth more than this at the Agent API's token price, read
+ * up to PRICE_MAX_AGE_MS earlier. The slack absorbs drift between the 1Click
+ * price behind the ticket and that check, so a $50 ticket may be up to $62.50
+ * there. Whatever the limits miss (an owner who sends the bought asset in and
+ * sells it back) stays inside the daily USD budget.
+ */
+export const MAX_CHECKED_ORDER_USD = HOSTED.maxOrderUsd * HOSTED.priceSlack;
+
+/**
+ * The desk's size jitter (DEFAULTS.sizeJitter in src/order.mjs; a test keeps
+ * them equal). With HOSTED.minSlices it sets the largest per-swap limit the
+ * proxy accepts: the biggest slice any seed can draw from such an order.
+ */
+export const HOSTED_SIZE_JITTER = 0.3;
 
 // Withdrawal destinations name the chain by its 1Click blockchain code (the
 // Agent API refuses `solana` or `ethereum` as "not canonical", checked 8 Nov).
@@ -83,31 +104,76 @@ export function destinationsFor(...entries) {
  * The policy a hosted order's wallet is created with: swap and withdraw only,
  * confidential form allowed, no swap of the sell asset above one slice, no
  * more than the order sold in a day, withdrawals only to the listed addresses.
+ * `buyAssetId` lists the order's two assets as the only ones the wallet may
+ * spend (the bought one so it can be withdrawn); without it the policy says
+ * `assets: 'any'`, which the proxy refuses. The proxy rebuilds this object
+ * from the request and refuses any difference, so every field here is a rule.
  */
-export function hostedPolicy({ sellAssetId, perSwap, perDay, destinations }) {
+export function hostedPolicy({ sellAssetId, buyAssetId, perSwap, perDay, destinations, budgetUsd = HOSTED.budgetUsd, maxActionsPerHour = HOSTED.maxActionsPerHour }) {
   return {
     frozen: false,
     actions: ['swap', 'withdraw'],
     confidential: true,
     owner_approval: false,
-    assets: 'any',
+    assets: buyAssetId ? [sellAssetId, buyAssetId] : 'any',
     limits: {
       per_transaction: { [sellAssetId]: BigInt(perSwap).toString() },
       daily: { [sellAssetId]: BigInt(perDay).toString() },
     },
-    max_actions_per_hour: HOSTED.maxActionsPerHour,
+    max_actions_per_hour: maxActionsPerHour,
     destinations: { mode: 'only', list: destinations },
-    budget: { daily_usd: String(HOSTED.budgetUsd), weekly_usd: null, monthly_usd: null },
+    budget: { daily_usd: String(budgetUsd), weekly_usd: null, monthly_usd: null },
     timelock_ms: 0,
   };
 }
 
 const refuse = (reason) => ({ ok: false, reason });
 const isUnits = (v) => typeof v === 'string' && /^[0-9]{1,40}$/.test(v);
-const usdAtMost = (v, max) => v != null && /^[0-9]+(\.[0-9]+)?$/.test(String(v)) && Number(v) <= max;
+const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const isHex64 = (v) => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
+const isLabel = (v) => typeof v === 'string' && /^[\x20-\x7e]{1,64}$/.test(v);
+// The Agent API's own form for USD amounts: no leading zeros, at most two decimals.
+const USD = /^(0|[1-9][0-9]{0,8})(\.[0-9]{1,2})?$/;
 
+/**
+ * Where `actual` first differs from `expected`, or null when both are the same
+ * JSON value with the same keys at every level. `extra` marks a key that
+ * `expected` does not have.
+ */
+function firstDifference(actual, expected, where = '') {
+  const at = (key) => (where ? `${where}.${key}` : key);
+  if (Array.isArray(expected)) {
+    if (!Array.isArray(actual) || actual.length !== expected.length) return { where };
+    for (let i = 0; i < expected.length; i++) {
+      const d = firstDifference(actual[i], expected[i], `${where}[${i}]`);
+      if (d) return d;
+    }
+    return null;
+  }
+  if (isObject(expected)) {
+    if (!isObject(actual)) return { where };
+    const extra = Object.keys(actual).find((k) => !Object.hasOwn(expected, k));
+    if (extra !== undefined) return { where: at(extra), extra: true };
+    for (const k of Object.keys(expected)) {
+      const d = Object.hasOwn(actual, k) ? firstDifference(actual[k], expected[k], at(k)) : { where: at(k) };
+      if (d) return d;
+    }
+    return null;
+  }
+  return actual === expected ? null : { where };
+}
+
+/** Refuses `request` unless it is exactly `expected`: no field added, dropped or changed. */
+function pinned(request, expected) {
+  const d = firstDifference(request, expected);
+  if (!d) return null;
+  const where = d.where || 'the intent';
+  return refuse(d.extra ? `${where} is not allowed in a hosted intent` : `${where} is not what the hosted rules set`);
+}
+
+/** The field checks give a precise reason; the pin in checkHostedIntent then refuses anything they do not name. */
 function checkPolicy(policy, priceOf) {
-  if (!policy || typeof policy !== 'object') return refuse('missing policy');
+  if (!isObject(policy)) return refuse('missing policy');
   if (policy.frozen !== false) return refuse('a new wallet starts unfrozen');
   const actions = policy.actions;
   if (!Array.isArray(actions) || !actions.includes('swap') || actions.some((a) => a !== 'swap' && a !== 'withdraw')) {
@@ -115,10 +181,11 @@ function checkPolicy(policy, priceOf) {
   }
   if (policy.confidential !== true) return refuse('the confidential form must be allowed');
   if (policy.owner_approval !== false) return refuse('owner approval per action is not used here');
-  if (!Number.isInteger(policy.max_actions_per_hour) || policy.max_actions_per_hour < 1 || policy.max_actions_per_hour > HOSTED.maxActionsPerHour) {
+  const perHour = policy.max_actions_per_hour;
+  if (!Number.isInteger(perHour) || perHour < 1 || perHour > HOSTED.maxActionsPerHour) {
     return refuse(`at most ${HOSTED.maxActionsPerHour} actions an hour`);
   }
-  if (policy.timelock_ms != null && policy.timelock_ms !== 0) return refuse('no timelock');
+  if (policy.timelock_ms !== 0) return refuse('no timelock');
   const d = policy.destinations;
   if (d?.mode !== 'only' || !Array.isArray(d.list) || d.list.length < 1 || d.list.length > HOSTED.maxDestinations) {
     return refuse(`withdrawals go to 1 or ${HOSTED.maxDestinations} listed addresses`);
@@ -129,9 +196,8 @@ function checkPolicy(policy, priceOf) {
     if (!check.ok) return refuse(`destination ${entry.chain}: ${check.reason}`);
   }
   const b = policy.budget;
-  if (!b || !usdAtMost(b.daily_usd, HOSTED.budgetUsd)) return refuse(`a daily budget of at most $${HOSTED.budgetUsd}`);
-  if ((b.weekly_usd != null && !usdAtMost(b.weekly_usd, HOSTED.budgetUsd * 7)) || (b.monthly_usd != null && !usdAtMost(b.monthly_usd, HOSTED.budgetUsd * 30))) {
-    return refuse('weekly and monthly budgets must stay within the daily one');
+  if (!isObject(b) || typeof b.daily_usd !== 'string' || !USD.test(b.daily_usd) || Number(b.daily_usd) > HOSTED.budgetUsd) {
+    return refuse(`a daily budget of at most $${HOSTED.budgetUsd}`);
   }
   const per = Object.entries(policy.limits?.per_transaction ?? {});
   const daily = Object.entries(policy.limits?.daily ?? {});
@@ -141,40 +207,72 @@ function checkPolicy(policy, priceOf) {
   if (!isUnits(perSwap) || !isUnits(perDay) || BigInt(perSwap) <= 0n || BigInt(perSwap) >= BigInt(perDay)) {
     return refuse('the per-swap limit must be below the daily one');
   }
+  // No order the desk can place draws a bigger slice than this, so no larger cap is needed.
+  const largest = largestPossibleSlice({ total: BigInt(perDay), slices: HOSTED.minSlices, sizeJitter: HOSTED_SIZE_JITTER });
+  if (BigInt(perSwap) > largest) return refuse(`the per-swap limit must not exceed the largest slice of a ${HOSTED.minSlices}-slice order`);
+  // The limits only bind the asset they name, so that asset is the one sold,
+  // and the only other asset the wallet may spend is the one bought.
+  const assets = policy.assets;
+  if (!Array.isArray(assets) || assets.length !== 2 || assets[0] !== assetId || typeof assets[1] !== 'string' || !assets[1] || assets[1] === assetId) {
+    return refuse("the wallet may spend only the order's two assets: the sold one, which the limits name, then the bought one");
+  }
   const token = priceOf(assetId);
   if (!token || !(token.price > 0) || !Number.isInteger(token.decimals)) return refuse(`no price for ${assetId}`);
+  if (!priceOf(assets[1])) return refuse(`no price for ${assets[1]}`);
   const usd = (Number(BigInt(perDay)) / 10 ** token.decimals) * token.price;
-  if (usd > HOSTED.maxOrderUsd * HOSTED.priceSlack) return refuse(`hosted orders are capped at $${HOSTED.maxOrderUsd}; this one is about $${usd.toFixed(2)}`);
-  return { ok: true, assetId, usd };
+  if (usd > MAX_CHECKED_ORDER_USD) return refuse(`hosted orders are capped at $${HOSTED.maxOrderUsd}; this one is about $${usd.toFixed(2)}`);
+  const expected = hostedPolicy({
+    sellAssetId: assetId,
+    buyAssetId: assets[1],
+    perSwap,
+    perDay,
+    destinations: destinationsFor(...d.list),
+    budgetUsd: Number(b.daily_usd),
+    maxActionsPerHour: perHour,
+  });
+  return { ok: true, assetId, usd, expected };
 }
 
 /**
- * Checks an owner intent before the proxy generates it.
+ * Checks an owner intent before the proxy generates it. Each allowed type is
+ * pinned whole: the request must equal the intent rebuilt from its checked
+ * values, so a field this file does not model (native signing, a schedule,
+ * another limit window, an external user id) is refused rather than passed on.
  * @param {object} request the body of `POST /v1/generate-intent`
  * @param {{ priceOf: (assetId: string) => ({ price: number, decimals: number } | null), now?: number }} p
  */
 export function checkHostedIntent(request, { priceOf, now = Date.now() }) {
-  switch (request?.type) {
+  switch (isObject(request) ? request.type : undefined) {
     case 'agent_create': {
       const o = request.owner;
-      if (o?.type !== 'evm' || !isEvmAddress(o.address) || !/^0x[0-9a-fA-F]{128}$/.test(o.public_key ?? '')) {
-        return refuse('the owner is an EVM wallet with its public key');
+      if (!isObject(o) || o.type !== 'evm' || typeof o.address !== 'string' || !/^0x[0-9a-f]{40}$/.test(o.address) || typeof o.public_key !== 'string' || !/^0x[0-9a-f]{128}$/.test(o.public_key)) {
+        return refuse('the owner is an EVM wallet with its public key, both in lowercase hex');
       }
-      if (typeof request.name !== 'string' || request.name.length > 64) return refuse('name the wallet in 64 characters or fewer');
-      return checkPolicy(request.policy, priceOf);
+      if (publicKeyToAddress(o.public_key) !== o.address) return refuse('the owner public key belongs to another address');
+      if (!Number.isSafeInteger(o.chain_id) || o.chain_id < 1) return refuse('the owner names an EVM chain id');
+      if (!isLabel(request.name)) return refuse('name the wallet in 64 characters or fewer');
+      const verdict = checkPolicy(request.policy, priceOf);
+      if (!verdict.ok) return verdict;
+      const owner = { type: 'evm', address: o.address, chain_id: o.chain_id, public_key: o.public_key };
+      return pinned(request, { type: 'agent_create', name: request.name, owner, policy: verdict.expected }) ?? { ok: true, assetId: verdict.assetId, usd: verdict.usd };
     }
     case 'grant_issue': {
-      if (typeof request.agent_id !== 'string' || !/^[0-9a-f]{64}$/.test(request.credential ?? '')) return refuse('a grant needs an agent and a credential commitment');
-      const expires = Date.parse(request.expires_at ?? '');
-      if (!Number.isFinite(expires) || expires <= now || expires > now + HOSTED.maxGrantHours * 3_600_000 + 60_000) {
+      if (!isHex64(request.agent_id) || !isHex64(request.credential)) return refuse('a grant needs an agent id and a credential commitment');
+      if (!isLabel(request.label)) return refuse('label the grant in 64 characters or fewer');
+      // The exact form toISOString gives, so the API reads the same instant this check did.
+      const expires = typeof request.expires_at === 'string' ? Date.parse(request.expires_at) : NaN;
+      const exact = Number.isFinite(expires) && new Date(expires).toISOString() === request.expires_at;
+      if (!exact || expires <= now || expires > now + HOSTED.maxGrantHours * 3_600_000 + 60_000) {
         return refuse(`a grant expires within ${HOSTED.maxGrantHours} hours`);
       }
-      return { ok: true };
+      const { agent_id, label, credential, expires_at } = request;
+      return pinned(request, { type: 'grant_issue', agent_id, label, credential, expires_at }) ?? { ok: true };
     }
     case 'agent_freeze':
     case 'agent_unfreeze':
-      return typeof request.agent_id === 'string' ? { ok: true } : refuse('freeze and unfreeze need an agent');
+      if (!isHex64(request.agent_id)) return refuse('freeze and unfreeze need an agent id');
+      return pinned(request, { type: request.type, agent_id: request.agent_id }) ?? { ok: true };
     default:
-      return refuse(`the site does not sign ${request?.type ?? 'this'} intents`);
+      return refuse(`the site does not sign ${typeof request?.type === 'string' ? request.type.slice(0, 40) : 'these'} intents`);
   }
 }

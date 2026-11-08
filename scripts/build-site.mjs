@@ -3,14 +3,32 @@
 // desk imports (followed from web/*.mjs) and the committed files it fetches,
 // and nothing else, so .env, journals and keys can not reach the host.
 //
-//   node scripts/build-site.mjs
+//   node scripts/build-site.mjs [out]     (default site/; WAKELESS_SITE_OUT works too)
 //   node scripts/serve.mjs --root site     (check the build locally)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const OUT = path.join(ROOT, 'site');
+const OUT = outDir(process.argv[2] ?? process.env.WAKELESS_SITE_OUT);
+
+/**
+ * Where the build goes. The folder is wiped first, so inside the repo only
+ * site/ itself is accepted, never a folder that holds the repo, and never a
+ * folder with other files in it unless an earlier build (its _headers) is there.
+ */
+function outDir(arg) {
+  const out = path.resolve(arg ?? path.join(ROOT, 'site'));
+  const fromRoot = path.relative(ROOT, out);
+  const inRepo = !fromRoot.startsWith('..') && !path.isAbsolute(fromRoot);
+  const toRoot = path.relative(out, ROOT);
+  const holdsRepo = !toRoot.startsWith('..') && !path.isAbsolute(toRoot);
+  if ((inRepo && fromRoot !== 'site') || holdsRepo) throw new Error(`refusing to build into ${out}: inside the repo only site/ is a build folder`);
+  if (fs.existsSync(out) && fs.readdirSync(out).length && !fs.existsSync(path.join(out, '_headers'))) {
+    throw new Error(`refusing to build into ${out}: it holds files but no earlier build`);
+  }
+  return out;
+}
 
 const IMPORT_RE = /(?:import|export)\s[^'"]*?from\s*['"](\.{1,2}\/[^'"]+)['"]|import\(\s*['"](\.{1,2}\/[^'"]+)['"]\s*\)/g;
 const DATA_RE = /['"](\.\.\/(?:examples|research)\/[^'"]+)['"]/g;
@@ -78,15 +96,18 @@ fs.copyFileSync(path.join(webDir, '404.html'), path.join(OUT, '404.html'));
 // Cloudflare Pages reads _redirects: one address for the landing page, which
 // Pages would otherwise also serve as /web/home.
 fs.writeFileSync(path.join(OUT, '_redirects'), '/web/home.html / 301\n/web/home / 301\n');
-// Pages reads _headers too. The desk asks a wallet for signatures, so no other
-// site may frame it, and the page may only call its own proxy and 1Click.
-// Scripts are not restricted further: some wallet extensions inject theirs.
+// Pages reads _headers too (for static files only; the proxy sets its own).
+// The desk asks a wallet for signatures, so no other site may frame it, and
+// the page may only call its own proxy and 1Click. It embeds no frames,
+// workers or media, and its fonts are its own; blob: URLs are only download
+// links, which img-src does not govern. Scripts are not restricted further:
+// some wallet extensions inject theirs.
 fs.writeFileSync(
   path.join(OUT, '_headers'),
   [
     '/*',
     '  X-Frame-Options: DENY',
-    "  Content-Security-Policy: frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'; connect-src 'self' https://1click.chaindefuser.com; img-src 'self' data: blob:",
+    "  Content-Security-Policy: frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'; connect-src 'self' https://1click.chaindefuser.com; img-src 'self' data:; font-src 'self'; media-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'self'",
     '  X-Content-Type-Options: nosniff',
     '  Referrer-Policy: strict-origin-when-cross-origin',
     '  Permissions-Policy: camera=(), microphone=(), geolocation=()',
@@ -95,5 +116,5 @@ fs.writeFileSync(
 );
 
 const outside = files.filter((f) => !f.startsWith(webDir + path.sep)).map(rel);
-console.log(`site/: ${files.length} files, ${(bytes / 1024).toFixed(0)} KiB`);
+console.log(`${rel(OUT)}/: ${files.length} files, ${(bytes / 1024).toFixed(0)} KiB`);
 console.log(`outside web/: ${outside.join(', ')}`);
