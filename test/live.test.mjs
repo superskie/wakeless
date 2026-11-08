@@ -10,7 +10,9 @@ import { buildReport, renderReport } from '../src/report.mjs';
 import { mulberry32 } from '../src/rng.mjs';
 import { fromUnits, minOutAtRate } from '../src/units.mjs';
 import { agentQuoteClient } from '../src/agent/quotes.mjs';
-import { agentExecutor } from '../src/executors/agent.mjs';
+import { agentExecutor, submitFailure } from '../src/executors/agent.mjs';
+import { dryExecutor } from '../src/executors/dry.mjs';
+import { safeErrorText } from '../src/oneclick.mjs';
 import { TOKENS } from './helpers.mjs';
 
 const spec = {
@@ -51,13 +53,15 @@ function fakeAgentApi({ outcomes = [], warnings = [], feeBps = 18, rate = 0.0104
     async getStatus(id) {
       const n = Number(id.slice(3));
       const { req } = submits[n - 1];
-      const outcome = outcomes[n - 1] ?? 'SUCCESS';
+      // An outcome is a status, or { status, details } for flags such as never_executed.
+      const scripted = outcomes[n - 1] ?? 'SUCCESS';
+      const { status: outcome, details: extra = {} } = typeof scripted === 'string' ? { status: scripted } : scripted;
       const settled = BigInt(req.min_amount_out) + 1_000n;
       return {
         correlation_id: id,
         status: outcome,
         failure_code: outcome === 'SUCCESS' ? null : 'not_filled',
-        details: { intent_hash: `intent-${n}`, amount_out: outcome === 'SUCCESS' ? settled.toString() : null, confidential: req.confidential },
+        details: { intent_hash: `intent-${n}`, amount_out: outcome === 'SUCCESS' ? settled.toString() : null, confidential: req.confidential, ...extra },
       };
     },
   };
@@ -153,13 +157,162 @@ test('an uncertain settlement stops the desk until a person checks it', async ()
 });
 
 test('three unfilled attempts in a row stop the desk', async () => {
-  const fake = fakeAgentApi({ outcomes: ['FAILED', 'FAILED', 'FAILED', 'FAILED'] });
+  const neverRan = { status: 'FAILED', details: { never_executed: true } };
+  const fake = fakeAgentApi({ outcomes: [neverRan, neverRan, neverRan, neverRan] });
   const { result, report } = await run(fake, 'live');
 
   assert.equal(result.halted, true);
   assert.equal(fake.submits.length, 3);
   assert.equal(report.filledPct, 0);
   assert.match(report.halted.message, /3 attempts in a row/);
+});
+
+test('a FAILED swap without proof that nothing ran stops the desk instead of sending the slice again', async () => {
+  const fake = fakeAgentApi({ outcomes: ['FAILED'] });
+  const { result, report } = await run(fake, 'live');
+
+  assert.equal(result.halted, true);
+  assert.equal(fake.submits.length, 1);
+  assert.equal(report.halted.status, 'FAILED');
+  assert.match(report.halted.message, /without proof that nothing ran; check op-1/);
+});
+
+/**
+ * An upstream that executes a swap the first time it sees an idempotency key
+ * (a replay of the key returns the same operation), while the client gets
+ * `lose(n)` instead of the reply to its n-th submit.
+ */
+function committingUpstream(lose) {
+  const fake = fakeAgentApi();
+  const swap = fake.bot.swap;
+  const executed = new Map();
+  let calls = 0;
+  fake.bot.swap = async (agentId, req, opts) => {
+    if (req.dry) return swap(agentId, req, opts);
+    calls += 1;
+    if (!executed.has(opts.idempotencyKey)) executed.set(opts.idempotencyKey, await swap(agentId, req, opts));
+    const failure = lose(calls);
+    if (failure) throw failure;
+    return executed.get(opts.idempotencyKey);
+  };
+  return { fake, executed };
+}
+
+test('a submit whose replies are all lost executes the slice once and stops with its key', async () => {
+  const lostReplies = {
+    'network drop': () => Object.assign(new Error('the Agent API is not reachable: fetch failed'), { status: null }),
+    'proxy 502': () => Object.assign(new Error('the Agent API did not answer (TimeoutError)'), { status: 502, code: 'upstream_unreachable', layer: 'proxy' }),
+    '409 on the replay': (n) =>
+      n === 1 ? Object.assign(new Error('fetch failed'), { status: null }) : Object.assign(new Error('A request with this key is in progress.'), { status: 409, code: 'idempotency_conflict', layer: 'request' }),
+    '429 on the replay': (n) =>
+      n === 1 ? Object.assign(new Error('fetch failed'), { status: null }) : Object.assign(new Error('Too many requests.'), { status: 429, code: 'rate_limited', retryable: true }),
+    'a refusal on the replay': (n) =>
+      n === 1 ? Object.assign(new Error('fetch failed'), { status: null }) : Object.assign(new Error('No route.'), { status: 409, code: 'route_unavailable', layer: 'provider' }),
+  };
+  for (const [name, lose] of Object.entries(lostReplies)) {
+    const { fake, executed } = committingUpstream(lose);
+    const { result, report, journal } = await run(fake, 'live');
+
+    const perSlice = new Map();
+    for (const key of executed.keys()) {
+      const slice = key.match(/^wakeless-run-(.+)-\d+$/)[1];
+      perSlice.set(slice, (perSlice.get(slice) ?? 0) + 1);
+    }
+    assert.ok([...perSlice.values()].every((n) => n === 1), `${name}: a slice executed twice: ${[...executed.keys()]}`);
+    assert.equal(executed.size, 1, `${name}: the desk stops at the first unclear submit`);
+    assert.equal(result.halted, true, name);
+    assert.equal(report.halted.status, 'UNKNOWN', name);
+    const [key] = executed.keys();
+    assert.match(report.halted.message, new RegExp(`check idempotency key ${key}`), name);
+    const fill = journal.events.find((e) => e.type === 'fill');
+    assert.equal(fill.details.idempotencyKey, key, name);
+    assert.equal(fill.details.unsettledAmountIn, fake.submits[0].req.amount, name);
+  }
+});
+
+test('an upstream that commits on first sight of a key and loses some replies still executes each slice once', async () => {
+  // The first try of every key loses its reply; the replay under the same key gets the original operation.
+  const seen = new Set();
+  const { fake, executed } = committingUpstream(() => null);
+  const commit = fake.bot.swap;
+  fake.bot.swap = async (agentId, req, opts) => {
+    const reply = await commit(agentId, req, opts);
+    if (!req.dry && !seen.has(opts.idempotencyKey)) {
+      seen.add(opts.idempotencyKey);
+      throw Object.assign(new Error('fetch failed'), { status: null });
+    }
+    return reply;
+  };
+  const { report } = await run(fake, 'live');
+
+  assert.equal(report.filledPct, 100);
+  assert.equal(executed.size, 5, 'one execution per slice');
+  assert.equal(fake.submits.length, 5);
+});
+
+test('a refusal documented as sending nothing lets the slice wait and go again under a new key', async () => {
+  const fake = fakeAgentApi();
+  const swap = fake.bot.swap;
+  let refused = 0;
+  fake.bot.swap = async (agentId, req, opts) => {
+    if (!req.dry && refused === 0) {
+      refused += 1;
+      throw Object.assign(new Error('The wallet is busy.'), { status: 409, code: 'wallet_busy', layer: 'policy' });
+    }
+    return swap(agentId, req, opts);
+  };
+  const { report } = await run(fake, 'live');
+
+  assert.equal(report.filledPct, 100);
+  assert.equal(fake.submits.length, 5);
+  assert.equal(report.misses[0].status, 'REJECTED');
+  assert.ok(fake.submits.some((s) => /-1$/.test(s.opts.idempotencyKey)), 'the refused slice went again under its next key');
+});
+
+test('only refusals documented as sending nothing count as nothing sent', () => {
+  const kind = (fields) => submitFailure(Object.assign(new Error('x'), fields));
+  assert.equal(kind({ status: 403, code: 'policy_action_denied', layer: 'policy' }), 'refused');
+  assert.equal(kind({ status: 400, code: 'insufficient_balance', layer: 'balance' }), 'refused');
+  assert.equal(kind({ status: 401, code: 'some_new_auth_code', layer: 'auth' }), 'refused');
+  assert.equal(kind({ status: 422, code: 'hosted_rule', layer: 'proxy' }), 'refused');
+  assert.equal(kind({ status: 409, code: 'route_unavailable', layer: 'provider' }), 'refused_for_now');
+  assert.equal(kind({ status: 429, code: 'rate_limited', layer: 'proxy' }), 'refused_for_now');
+  assert.equal(kind({ status: 429, code: 'provider_rate_limited', layer: 'provider' }), 'refused_for_now');
+  // May have executed: no answer, a server failure, a retryable throttle, earlier work under the key, anything new.
+  assert.equal(kind({ status: null }), 'unknown');
+  assert.equal(kind({ name: 'TimeoutError' }), 'unknown');
+  assert.equal(kind({ status: 502, code: 'upstream_unreachable', layer: 'proxy' }), 'unknown');
+  assert.equal(kind({ status: 500, code: 'internal_error', layer: 'api', retryable: true }), 'unknown');
+  assert.equal(kind({ status: 429, code: 'provider_rate_limited', retryable: true }), 'unknown');
+  assert.equal(kind({ status: 409, code: 'idempotency_conflict', layer: 'request' }), 'unknown');
+  assert.equal(kind({ status: 400, code: 'some_new_code' }), 'unknown');
+  assert.equal(kind({ status: 418, code: 'teapot', layer: 'proxy' }), 'unknown');
+});
+
+test('the executor refuses a floor that is not a positive rate, in every mode', async () => {
+  const fake = fakeAgentApi();
+  const order = prepareOrder(spec, TOKENS);
+  const quote = { amountIn: 200_000_000n, amountOut: 2_000_000_000n, minAmountOut: null, warnings: [] };
+  const request = { originAsset: order.sell.assetId, destinationAsset: order.buy.assetId };
+  for (const mode of ['preview', 'live']) {
+    const executor = agentExecutor({ api: fake.api, bot: fake.bot, agentId: 'agent-1', mode, runId: 'run' });
+    for (const floorRate of [0, -1, NaN]) {
+      const fill = await executor.execute({ slice: { id: '1', defers: 0 }, quote, request, floorRate, order });
+      assert.equal(fill.status, 'NO_FLOOR');
+      assert.equal(fill.next, 'halt');
+      assert.equal(fill.amountIn, 0n);
+    }
+  }
+  const dry = await dryExecutor().execute({ slice: { id: '1' }, quote, floorRate: 0 });
+  assert.deepEqual([dry.status, dry.next, dry.amountIn], ['NO_FLOOR', 'halt', 0n]);
+  assert.equal(fake.submits.length, 0);
+});
+
+test('error messages lose any header value the runtime quoted, so no key reaches a journal', () => {
+  const err = new TypeError('Headers.append: "FAKE-NOT-A-KEY\rmid" is an invalid header value.');
+  assert.equal(safeErrorText(err), 'Headers.append: "<redacted>" is an invalid header value.');
+  assert.equal(safeErrorText({ message: 'x "k1"k2"k3" is an invalid header value' }), 'x "<redacted>" is an invalid header value');
+  assert.equal(safeErrorText(new Error('key FAKE-1 refused'), ['FAKE-1']), 'key <redacted> refused');
 });
 
 test('a network error is retried with the same idempotency key', async () => {

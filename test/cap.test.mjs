@@ -91,6 +91,18 @@ test('the desk reads whether the signed policy holds the order to one slice per 
   assert.equal(check(cap(450, 999)).reason, 'daily_below_order');
   const ok = check(cap(450, 1000));
   assert.deepEqual(ok, { ok: true, reason: 'capped', perSwap: 450n, perDay: 1000n, largest: 450n, total: 1000n });
-  assert.equal(check(cap(600)).ok, true, 'a cap without a daily limit still stops the one big swap');
   assert.equal(checkSliceCap(null, { assetId, schedule, total: 1000n }).reason, 'no_cap');
+});
+
+test('a live run also needs a daily limit of at most the order, so a slice sent twice can not sell more', () => {
+  const assetId = 'nep141:usdc.test';
+  const schedule = [{ amount: 300n }, { amount: 450n }, { amount: 250n }];
+  const check = (daily) => checkSliceCap({ limits: { per_transaction: { [assetId]: '600' }, ...(daily ? { daily: { [assetId]: daily } } : {}) } }, { assetId, schedule, total: 1000n });
+
+  assert.deepEqual([check(null).ok, check(null).reason], [false, 'no_daily_cap']);
+  assert.deepEqual([check('1001').ok, check('1001').reason], [false, 'daily_above_order']);
+  assert.equal(check('1000').ok, true);
+  // A daily limit on another asset does not hold this one.
+  const other = checkSliceCap({ limits: { per_transaction: { [assetId]: '600' }, daily: { 'nep141:other': '1' } } }, { assetId, schedule, total: 1000n });
+  assert.equal(other.reason, 'no_daily_cap');
 });

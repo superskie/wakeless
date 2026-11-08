@@ -1,12 +1,11 @@
 // Shared plumbing for Wakeless live mode on the NEAR Intents Agent API.
 // Secrets come from the repository's .env and are never printed.
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createAgentApi } from '@near-intents-agent-api/sdk';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { waitForStatus } from '../src/agent/status.mjs';
-import { readEnvFile } from '../src/env.mjs';
+import { appendEnvFile, checkSecret, readEnvFile } from '../src/env.mjs';
 
 export { waitForStatus };
 
@@ -18,22 +17,19 @@ export function readEnv(file = ENV_FILE) {
   return readEnvFile(file);
 }
 
-/** Append KEY=value lines to .env. Refuses to overwrite a key that already has a value. */
-export function appendEnv(entries, comment) {
-  const current = readEnv();
-  const lines = [];
-  for (const [key, value] of Object.entries(entries)) {
-    if (current[key]) throw new Error(`${key} is already set in .env; remove it first to replace it`);
-    lines.push(`${key}=${value}`);
-  }
-  const prefix = fs.existsSync(ENV_FILE) && !fs.readFileSync(ENV_FILE, 'utf8').endsWith('\n') ? '\n' : '';
-  fs.appendFileSync(ENV_FILE, `${prefix}${comment ? `# ${comment}\n` : ''}${lines.join('\n')}\n`);
+/**
+ * Append KEY=value lines to .env in its own encoding (UTF-8 or UTF-16 LE),
+ * then read them back. Refuses to overwrite a key that already has a value.
+ */
+export function appendEnv(entries, comment, file = ENV_FILE) {
+  appendEnvFile(file, entries, comment);
 }
 
+/** A value from .env that must be there. Every one goes into a header or a key, so it must be printable ASCII. */
 export function required(env, key, hint) {
   const value = env[key];
   if (!value) throw new Error(`${key} is not set in .env${hint ? ` (${hint})` : ''}`);
-  return value;
+  return checkSecret(key, value);
 }
 
 export function agentApi(env = readEnv()) {

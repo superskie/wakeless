@@ -3,6 +3,7 @@
 // quotes, so the engine, the guard and the report treat a live slice exactly
 // like a dry-run one, and the guard judges the route the swap will really take.
 import { toNumber } from '../units.mjs';
+import { safeErrorText } from '../oneclick.mjs';
 
 /** Agent API token list in the shape the order code expects. */
 export function toDeskTokens(list) {
@@ -88,7 +89,8 @@ export function agentQuoteClient({ bot, agentId, prices, confidential = true, cl
           ok: false,
           status: err?.status ?? 0,
           latencyMs: latency(),
-          json: { source: 'agent-api-preview', message: err?.message ?? String(err), code: err?.code ?? null },
+          // The message is journaled, so a header value the runtime quoted in it is cut out.
+          json: { source: 'agent-api-preview', message: safeErrorText(err), code: err?.code ?? null },
         };
       }
     },

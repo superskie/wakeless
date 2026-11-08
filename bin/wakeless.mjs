@@ -4,17 +4,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomInt } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { createOneClick, intentsQuoteBody, normalizeQuote } from '../src/oneclick.mjs';
+import { createOneClick, intentsQuoteBody, normalizeQuote, safeErrorText } from '../src/oneclick.mjs';
+import { checkSecret } from '../src/env.mjs';
 import { resolveAsset } from '../src/assets.mjs';
 import { prepareOrder } from '../src/order.mjs';
 import { runOrder } from '../src/engine.mjs';
 import { dryExecutor } from '../src/executors/dry.mjs';
 import { realClock } from '../src/clock.mjs';
-import { fileJournal, readJournal } from '../src/journal.mjs';
+import { fileJournal, readJournal, reportPathFor } from '../src/journal.mjs';
 import { buildReport, renderReport } from '../src/report.mjs';
 import { mulberry32 } from '../src/rng.mjs';
 import { fromUnits, toUnits } from '../src/units.mjs';
-import { describeEvent, fmt } from '../src/describe.mjs';
+import { describeEvent, fmt, printable } from '../src/describe.mjs';
 import { adviceText, precheck } from '../src/precheck.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -88,7 +89,7 @@ async function cmdImpact(args, client) {
       const deltaText = `${delta >= 0 ? '+' : ''}${fmt(delta, 1)}`;
       console.log(`${fmt(usd, 0).padStart(12)} ${received.padStart(20)} ${fmt(q.costBps, 1).padStart(10)} ${deltaText.padStart(12)}`);
     } else {
-      console.log(`${fmt(usd, 0).padStart(12)}   ${q.message} (HTTP ${q.status})`);
+      console.log(`${fmt(usd, 0).padStart(12)}   ${printable(q.message)} (HTTP ${q.status})`);
     }
   }
   console.log(
@@ -127,7 +128,7 @@ async function cmdPlan(args, client) {
     const size = fmt(Number(fromUnits(row.amount, sell.decimals)), 2);
     const cells = row.q.ok
       ? `${signedBps(row.penaltyBps).padStart(13)} ${signedBps(row.vsOneSwapBps).padStart(13)}`
-      : `   ${row.q.message} (HTTP ${row.q.status})`;
+      : `   ${printable(row.q.message)} (HTTP ${row.q.status})`;
     const mark = row.slices === r.recommendedSlices ? '  <' : '';
     console.log(`${String(row.slices).padStart(8)} ${size.padStart(16)} ${cells}${mark}`);
   }
@@ -158,9 +159,11 @@ async function cmdRun(args, client) {
   const speed = args.speed ? Number(args.speed) : 1;
   const seed = args.seed !== undefined ? Number(args.seed) : randomInt(2 ** 31);
   const journalFile = args.journal ?? path.join(ROOT, 'journals', `${order.id}_${stamp()}.jsonl`);
+  // Both names are checked before the run: neither the journal nor its report may overwrite a file.
+  const reportFile = reportPathFor(journalFile);
   const journal = fileJournal(journalFile);
 
-  await runOrder({
+  const result = await runOrder({
     order,
     client,
     executor: dryExecutor(),
@@ -174,11 +177,13 @@ async function cmdRun(args, client) {
     },
   });
 
+  journal.close();
   const report = renderReport(buildReport(readJournal(journalFile)));
-  const reportFile = journalFile.replace(/\.jsonl$/, '.md');
-  fs.writeFileSync(reportFile, report);
+  fs.writeFileSync(reportFile, report, { flag: 'wx' });
   console.log(`\n${report}`);
   console.log(`Journal: ${path.relative(process.cwd(), journalFile)}\nReport:  ${path.relative(process.cwd(), reportFile)}`);
+  // A run that aborted or stopped early did not do what was asked: scripts see it in the exit code.
+  if (result.aborted || result.halted) process.exitCode = 1;
 }
 
 function cmdReport(args) {
@@ -244,7 +249,7 @@ async function cmdCheck(client, hasKey) {
     const body = { ...intentsQuoteBody({ sellAsset: sell.assetId, buyAsset: buy.assetId, amount, account: 'dry-run.wakeless.near' }), ...extra };
     const res = await client.quote(body);
     const q = normalizeQuote(res, { sellDecimals: sell.decimals, buyDecimals: buy.decimals, amountIn: amount });
-    const detail = q.ok ? `ok, ${fmt(Number(fromUnits(q.amountOut, buy.decimals)), 6)} SOL for $1,000 USDC` : q.message;
+    const detail = q.ok ? `ok, ${fmt(Number(fromUnits(q.amountOut, buy.decimals)), 6)} SOL for $1,000 USDC` : printable(q.message);
     console.log(`${label.padEnd(40)} HTTP ${res.status}  ${detail}`);
     if (hasKey && res.status === 401 && /invalid token/i.test(q.message)) rejected = true;
   }
@@ -261,6 +266,8 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   loadDotEnv(path.join(ROOT, '.env'));
   const apiKey = process.env.ONECLICK_API_KEY?.trim() || undefined;
+  // A key with a stray control character would be quoted in full by fetch's error.
+  if (apiKey) checkSecret('ONECLICK_API_KEY', apiKey);
   const client = createOneClick({ apiKey });
   switch (args._[0]) {
     case 'check':
@@ -280,6 +287,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(`error: ${err.message}`);
+  console.error(`error: ${printable(safeErrorText(err, [process.env.ONECLICK_API_KEY?.trim()]))}`);
   process.exitCode = 1;
 });

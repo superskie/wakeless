@@ -71,10 +71,15 @@ export function buildReport(events) {
     ? probe.outUsd / toNumber(BigInt(probe.amountOut), buy.decimals)
     : null;
 
+  // Whether the whole-order quote found no liquidity, or got no answer at all
+  // (a timeout or an outage proves nothing about one swap), and its HTTP status.
+  const oneShotStatus = arrival?.oneShot?.status ?? oneShot?.status ?? null;
+  const oneShotFacts = { noLiquidity: oneShot?.ok ? false : Boolean(oneShot?.noLiquidity), status: oneShotStatus > 0 ? oneShotStatus : null };
   let vsOneShot;
   if (oneShot?.ok) {
     const outForFilled = oneShot.rate * inHuman;
     vsOneShot = {
+      ...oneShotFacts,
       executable: true,
       rate: oneShot.rate,
       costBps: oneShot.costBps,
@@ -85,7 +90,7 @@ export function buildReport(events) {
       executionSavingsBps: oneShot.costBps != null && executionCostBps != null ? oneShot.costBps - executionCostBps : null,
     };
   } else {
-    vsOneShot = { executable: false, message: oneShot?.message ?? 'no quote recorded' };
+    vsOneShot = { executable: false, message: oneShot?.message ?? 'no quote recorded', ...oneShotFacts };
   }
 
   const reasons = {};
@@ -145,6 +150,10 @@ export function buildReport(events) {
       reason: m.details?.failureReason ?? m.details?.failureCode ?? m.details?.code ?? (m.details?.warnings?.length ? m.details.warnings.join(', ') : null),
     })),
     skipped: skips.map((s) => ({ slice: s.sliceId, t: s.t, amount: fromUnits(BigInt(s.amount), sell.decimals), reason: s.reason })),
+    // Times the desk fell behind its schedule (a frozen tab, a sleeping laptop).
+    stalls: events
+      .filter((e) => e.type === 'stall')
+      .map((s) => ({ t: s.t, slice: s.sliceId, lateMs: s.lateMs, respread: s.respread?.length ?? 0, expired: s.expired?.length ?? 0 })),
   };
 }
 
@@ -205,6 +214,13 @@ export function renderReport(r) {
   if (r.halted) {
     lines.push(`Stopped early at ${clock(r.halted.t)} on slice ${r.halted.slice} (${r.halted.status}): ${r.halted.message}.`, '');
   }
+  for (const s of r.stalls ?? []) {
+    lines.push(
+      `Stalled at ${clock(s.t)}: slice ${s.slice} came due ${clock(s.lateMs)} late (a frozen tab or a sleeping computer). ` +
+        `${s.respread} slices left were spread over the time left${s.expired ? ` and ${s.expired} expired unfilled` : ''}.`,
+      '',
+    );
+  }
   if (r.walletCap) {
     const c = r.walletCap;
     lines.push(
@@ -251,8 +267,12 @@ export function renderReport(r) {
       );
     }
     lines.push('');
-  } else {
+  } else if (o.noLiquidity) {
     lines.push(`- Not executable as one swap: ${o.message}.`, '');
+  } else {
+    // No answer is not a refusal: say who did not quote, never "no liquidity".
+    const source = r.mode === 'dry' ? '1Click' : 'the Agent API';
+    lines.push(`- No one-shot comparison: ${source} did not quote the whole order (${o.status ? `HTTP ${o.status}: ` : ''}${o.message}).`, '');
   }
 
   // Live fills also show how far each settlement landed from its own quote.

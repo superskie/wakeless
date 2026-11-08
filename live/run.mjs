@@ -6,11 +6,12 @@ import { randomInt } from 'node:crypto';
 import { prepareOrder } from '../src/order.mjs';
 import { runOrder, scheduleFor } from '../src/engine.mjs';
 import { realClock } from '../src/clock.mjs';
-import { fileJournal, readJournal } from '../src/journal.mjs';
+import { fileJournal, readJournal, reportPathFor } from '../src/journal.mjs';
 import { buildReport, renderReport } from '../src/report.mjs';
 import { mulberry32 } from '../src/rng.mjs';
 import { fromUnits } from '../src/units.mjs';
-import { describeEvent } from '../src/describe.mjs';
+import { describeEvent, printable } from '../src/describe.mjs';
+import { safeErrorText } from '../src/oneclick.mjs';
 import { agentApi, readEnv, required, ROOT } from './lib.mjs';
 import { agentQuoteClient, priceBook } from '../src/agent/quotes.mjs';
 import { agentExecutor } from '../src/executors/agent.mjs';
@@ -92,12 +93,14 @@ async function main() {
     no_cap: `Wallet cap: none. The wallet would accept all ${order.amount} ${sym} as one swap.`,
     cap_allows_whole_order: `Wallet cap: ${units(cap.perSwap ?? 0n)} per swap, which lets the whole order through as one swap.`,
     cap_below_slice: `Wallet cap: ${units(cap.perSwap ?? 0n)} per swap, below this run's largest slice of ${units(cap.largest)}.`,
+    no_daily_cap: `Wallet cap: ${units(cap.perSwap ?? 0n)} per swap, but no daily limit, so a slice sent twice could sell more than the order.`,
+    daily_above_order: `Wallet cap: ${units(cap.perSwap ?? 0n)} per swap, but up to ${units(cap.perDay ?? 0n)} a day, more than the order.`,
     daily_below_order: `Wallet cap: at most ${units(cap.perDay ?? 0n)} a day, less than the order.`,
   }[cap.reason];
   console.log(capLine);
   if (live && !cap.ok) {
     throw new Error(
-      `the desk trades live only from a wallet that refuses any swap larger than one slice; ` +
+      `the desk trades live only from a wallet that refuses any swap larger than one slice and any sale beyond the order in a day; ` +
         `have the owner sign the cap first: node live/agent.mjs cap ${file}`,
     );
   }
@@ -119,13 +122,16 @@ async function main() {
 
   const mode = live ? 'live' : 'preview';
   const journalFile = args.journal ?? path.join(ROOT, 'journals', `${order.id}_${mode}_${stamp()}.jsonl`);
+  // The journal is the only record of idempotency keys and correlation ids: never overwrite or append to one.
+  const reportFile = reportPathFor(journalFile);
+  const journal = fileJournal(journalFile);
 
-  await runOrder({
+  const result = await runOrder({
     order,
     client: agentQuoteClient({ bot, agentId, prices, confidential: true }),
     executor: agentExecutor({ api, bot, agentId, mode, confidential: true }),
     clock: realClock({ speed }),
-    journal: fileJournal(journalFile),
+    journal,
     rand: mulberry32(seed),
     seed,
     walletCap: {
@@ -141,14 +147,16 @@ async function main() {
     },
   });
 
+  journal.close();
   const report = renderReport(buildReport(readJournal(journalFile)));
-  const reportFile = journalFile.replace(/\.jsonl$/, '.md');
-  fs.writeFileSync(reportFile, report);
+  fs.writeFileSync(reportFile, report, { flag: 'wx' });
   console.log(`\n${report}`);
   console.log(`Journal: ${path.relative(process.cwd(), journalFile)}\nReport:  ${path.relative(process.cwd(), reportFile)}`);
+  // An aborted or stopped run needs a person (an UNKNOWN or TIMEOUT slice above all): say so in the exit code.
+  if (result.aborted || result.halted) process.exitCode = 1;
 }
 
 main().catch((err) => {
-  console.error(`error: ${err.message}`);
+  console.error(`error: ${printable(safeErrorText(err))}`);
   process.exitCode = 1;
 });

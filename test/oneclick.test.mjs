@@ -48,6 +48,31 @@ test('client turns network errors into a failed result after retries', async () 
   assert.equal(seen.length, 3);
 });
 
+test('a timeout is tried once more, waits longer than 1Click does, and says 1Click did not answer', async () => {
+  const timeout = () => Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+  const { impl, seen } = scriptedFetch([timeout(), timeout(), { status: 201, body: {} }]);
+  const res = await createOneClick({ fetchImpl: impl, sleep: async () => {} }).quote({});
+  assert.equal(seen.length, 2, 'a second timeout ends the tries');
+  assert.equal(res.json.message, '1Click did not answer within 30 s');
+
+  // 1Click's own answer when its solvers are slow counts as a timeout too.
+  const slow = { status: 500, body: { message: 'Failed to receive response within timeout of 25000ms' } };
+  const upstream = scriptedFetch([slow, { ...slow }, { status: 201, body: {} }]);
+  const answer = await createOneClick({ fetchImpl: upstream.impl, sleep: async () => {} }).quote({});
+  assert.equal(upstream.seen.length, 2);
+  assert.equal(answer.status, 500);
+  assert.match(answer.json.message, /within timeout of 25000ms/);
+});
+
+test('an error that quotes the partner key keeps it out of the result', async () => {
+  const key = 'FAKE-KEY\rmid';
+  const leak = new TypeError(`Headers.append: "${key}" is an invalid header value.`);
+  const { impl } = scriptedFetch([leak, leak, leak]);
+  const res = await createOneClick({ fetchImpl: impl, apiKey: key, sleep: async () => {} }).quote({});
+  assert.doesNotMatch(res.json.message, /FAKE-KEY/);
+  assert.match(res.json.message, /<redacted>/);
+});
+
 test('intents quote body keeps every leg inside NEAR Intents', () => {
   const body = intentsQuoteBody({ sellAsset: 'a', buyAsset: 'b', amount: 5n, account: 'x.near', now: 0 });
   assert.deepEqual(

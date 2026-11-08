@@ -30,6 +30,7 @@ export function buildSchedule({ total, slices, horizonMs, timeJitter = 0, sizeJi
   if (total < BigInt(slices) * minSlice) {
     throw new Error(`total is smaller than ${slices} slices of the minimum size; use fewer slices`);
   }
+  if (total < BigInt(slices)) throw new Error(`total is smaller than ${slices} base units, so a slice would be empty; use fewer slices`);
 
   const slot = horizonMs / slices;
   const weights = [];
@@ -47,6 +48,10 @@ export function buildSchedule({ total, slices, horizonMs, timeJitter = 0, sizeJi
   const spare = total - BigInt(slices) * minSlice;
   const amounts = weights.map((w) => minSlice + (spare * w) / weightSum);
   amounts[slices - 1] += total - amounts.reduce((a, b) => a + b, 0n);
+  // Without a minimum, a small total can round a slice down to nothing: a swap of 0 is refused.
+  if (amounts.some((amount) => amount <= 0n)) {
+    throw new Error('a slice would be 0 base units; use fewer slices or a minimum slice of at least 1 unit');
+  }
 
   return amounts.map((amount, index) => ({ index, atMs: times[index], amount }));
 }

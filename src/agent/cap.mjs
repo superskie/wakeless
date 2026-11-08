@@ -34,8 +34,12 @@ export function withSliceCap(policy, { assetId, perSwap, perDay }) {
  * - `no_cap`: the wallet would accept the whole order as one swap.
  * - `cap_allows_whole_order`: there is a cap, but the whole order fits under it.
  * - `cap_below_slice`: the wallet would refuse one of this run's slices.
+ * - `no_daily_cap`: no daily limit on the sold asset, so a slice sent twice
+ *   (or a second run) could sell more than the order.
+ * - `daily_above_order`: the daily limit lets more than the order through.
  * - `daily_below_order`: the wallet would stop the order before it is done.
- * - `capped`: every slice fits and the whole order as one swap does not.
+ * - `capped`: every slice fits, the whole order as one swap does not, and
+ *   the wallet sells at most the order in a day.
  *
  * @param {object|null} policy the applied policy (`GET /v1/agents/{id}/policy`)
  * @param {{ assetId: string, schedule: { amount: bigint }[], total: bigint }} p
@@ -52,6 +56,8 @@ export function checkSliceCap(policy, { assetId, schedule, total }) {
   if (perSwap === null) reason = 'no_cap';
   else if (perSwap >= total) reason = 'cap_allows_whole_order';
   else if (perSwap < largest) reason = 'cap_below_slice';
-  else if (perDay !== null && perDay < total) reason = 'daily_below_order';
+  else if (perDay === null) reason = 'no_daily_cap';
+  else if (perDay > total) reason = 'daily_above_order';
+  else if (perDay < total) reason = 'daily_below_order';
   return { ok: reason === 'capped', reason, perSwap, perDay, largest, total };
 }

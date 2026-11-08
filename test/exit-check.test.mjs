@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { describeExit, exitAddressHistory } from '../live/exit-check.mjs';
+import { describeExit, exitAddressHistory, exitAddressProblem } from '../live/exit-check.mjs';
 
 const ADDRESS = '0x1111111111111111111111111111111111111234';
 
@@ -60,4 +60,21 @@ test('chains without an RPC, bad addresses and dead RPCs are reported, not guess
   assert.match(describeExit(await exitAddressHistory({ chain: 'base', address: ADDRESS, fetchImpl: dead })), /the RPC did not answer \(connect ECONNREFUSED\)/);
   const partial = async () => ({ json: async () => [{ id: 1, result: '0x0' }] });
   assert.match(describeExit(await exitAddressHistory({ chain: 'base', address: ADDRESS, fetchImpl: partial })), /incomplete/);
+});
+
+test('allow-withdraw refuses a malformed EVM exit address before anything is signed', () => {
+  for (const chain of ['base', 'ethereum', 'arb', 'Arbitrum']) {
+    assert.equal(exitAddressProblem(chain, ADDRESS), null);
+    assert.match(exitAddressProblem(chain, ADDRESS.slice(0, -1)), /not an EVM address/);
+    assert.match(exitAddressProblem(chain, `${ADDRESS}0`), /not an EVM address/);
+    assert.match(exitAddressProblem(chain, ADDRESS.replace('0x', '')), /not an EVM address/);
+  }
+  // Other chains have their own address forms; the API checks those.
+  assert.equal(exitAddressProblem('near', 'someone.near'), null);
+});
+
+test('the check asks the RPC it is given, so the owner can keep the address off the public one', async () => {
+  const rpc = fakeRpc();
+  await exitAddressHistory({ chain: 'base', address: ADDRESS, fetchImpl: rpc.fetchImpl, rpc: 'http://127.0.0.1:8545' });
+  assert.deepEqual(rpc.calls.map((c) => c.url), ['http://127.0.0.1:8545']);
 });

@@ -8,6 +8,20 @@ export const EVM_RPC = Object.freeze({
   arb: 'https://arb1.arbitrum.io/rpc',
 });
 
+/** Chains whose addresses are EVM addresses, in the Agent API's spellings and the short ones above. */
+const EVM_CHAINS = new Set(['ethereum', 'eth', 'base', 'arbitrum', 'arb', 'optimism', 'polygon', 'bsc', 'avalanche', 'hyperevm', 'hood']);
+
+/**
+ * Why `address` can not be an exit on `chain`, or null. Only the shape is
+ * checked here (0x and 40 hex digits); the caller checks the EIP-55 checksum.
+ */
+export function exitAddressProblem(chain, address) {
+  if (EVM_CHAINS.has(String(chain).toLowerCase()) && !/^0x[0-9a-fA-F]{40}$/.test(address)) {
+    return `${address} is not an EVM address (0x and 40 hex digits)`;
+  }
+  return null;
+}
+
 /**
  * @param {object} p
  * @param {string} p.chain Agent API chain id (base, eth, arb)

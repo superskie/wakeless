@@ -59,3 +59,19 @@ test('minimum slice is enforced and impossible splits are refused', () => {
   }
   assert.throws(() => buildSchedule({ ...base, minSlice: 20_000_000_000n, rand: mulberry32(1) }), /fewer slices/);
 });
+
+test('no schedule holds an empty slice: such a config is refused, and a 1-unit minimum always works', () => {
+  const tiny = { total: 25n, slices: 25, horizonMs: 60_000, sizeJitter: 0.9 };
+  assert.throws(() => buildSchedule({ ...tiny, total: 24n, rand: mulberry32(1) }), /empty/);
+  let refused = 0;
+  for (let seed = 1; seed <= 200; seed++) {
+    try {
+      assert.ok(buildSchedule({ ...tiny, total: 60n, rand: mulberry32(seed) }).every((s) => s.amount > 0n));
+    } catch (err) {
+      assert.match(err.message, /0 base units/);
+      refused += 1;
+    }
+    assert.ok(buildSchedule({ ...tiny, total: 60n, minSlice: 1n, rand: mulberry32(seed) }).every((s) => s.amount >= 1n));
+  }
+  assert.ok(refused > 0, 'without a minimum some seeds would round a slice to 0');
+});

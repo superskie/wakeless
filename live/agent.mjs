@@ -6,8 +6,9 @@
 //   node live/agent.mjs grant              issue the desk's grant token (.env)
 //   node live/agent.mjs status             agent, policy and balances
 //   node live/agent.mjs deposit <asset> [amount]   deposit address; funds land in the confidential balance
-//   node live/agent.mjs shield <asset> <amount>    move a public balance into the confidential one
-//   node live/agent.mjs allow-withdraw <chain> <address>   owner signs: withdrawals only to this address
+//   node live/agent.mjs shield <asset> <amount> [--confirm]   preview, or move a public balance into the confidential one
+//   node live/agent.mjs allow-withdraw <chain> <address> [--rpc <url>] [--no-check] [--confirm]
+//                                          preview, or the owner signs: withdrawals only to this address
 //   node live/agent.mjs withdraw <asset> <amount> <chain> <address> [--execute]   preview, or withdraw
 //   node live/agent.mjs quote <from> <to> <amount> preview a swap (dry, no funds move)
 //   node live/agent.mjs cap <order.json>   owner signs: no swap above one slice of this order, no more than the order a day
@@ -18,12 +19,15 @@
 // nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near).
 import fs from 'node:fs';
 import { createGrantCredential, createIdempotencyKey } from '@near-intents-agent-api/sdk';
+import { isAddress } from 'viem';
 import { prepareOrder } from '../src/order.mjs';
 import { fromUnits } from '../src/units.mjs';
 import { agentApi, appendEnv, createOwnerKey, loadOwner, readEnv, required, runOwnerIntent, show, waitForStatus, wakelessPolicy } from './lib.mjs';
-import { describeExit, exitAddressHistory } from './exit-check.mjs';
+import { EVM_RPC, describeExit, exitAddressHistory, exitAddressProblem } from './exit-check.mjs';
 import { priceBook } from '../src/agent/quotes.mjs';
 import { capFor, withSliceCap } from '../src/agent/cap.mjs';
+import { safeErrorText } from '../src/oneclick.mjs';
+import { printable } from '../src/describe.mjs';
 
 /** Read an order file against the Agent API's token list. */
 async function loadOrder(api, file) {
@@ -32,6 +36,10 @@ async function loadOrder(api, file) {
 }
 
 const [command, ...args] = process.argv.slice(2);
+/** The words that are not flags, skipping the value after an option such as --rpc. */
+const positional = (options = []) => args.filter((a, i) => !a.startsWith('--') && !options.includes(args[i - 1]));
+const optionValue = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
+const confirmed = args.includes('--confirm');
 
 async function main() {
   const env = readEnv();
@@ -121,11 +129,19 @@ async function main() {
       return;
     }
     case 'shield': {
+      // Moves funds between the agent's own balances, so like withdraw it only previews without --confirm.
       const api = agentApi(env);
       const agentId = required(env, 'WAKELESS_AGENT_ID');
       const bot = api.forGrant(required(env, 'WAKELESS_GRANT_TOKEN', 'run: node live/agent.mjs grant'));
-      const [asset, amount] = args;
-      if (!asset || !amount) throw new Error('usage: shield <asset id> <amount in base units>');
+      const [asset, amount] = positional();
+      if (!asset || !amount) throw new Error('usage: shield <asset id> <amount in base units> [--confirm]');
+      if (!confirmed) {
+        const { balances } = await api.getBalances(agentId, { source: 'public' });
+        const held = balances.find((b) => b.asset_id === asset)?.available_raw ?? '0';
+        console.log(`Would move ${amount} base units of ${asset} from the public balance (available: ${held}) to the confidential one.`);
+        console.log('Preview only: nothing was moved. Add --confirm to move it.');
+        return;
+      }
       const started = await bot.shield(agentId, { asset, amount }, { idempotencyKey: createIdempotencyKey() });
       const final = await waitForStatus(api, started.correlation_id);
       show({ correlation_id: final.correlation_id, status: final.status, failure_code: final.failure_code });
@@ -133,13 +149,26 @@ async function main() {
     }
     case 'allow-withdraw': {
       // The owner signs a new policy revision: the agent may also withdraw, but
-      // only to this one chain address. Any other recipient is refused.
-      const [chain, address] = args;
-      if (!chain || !address) throw new Error('usage: allow-withdraw <chain> <address>');
-      // Show the owner what this exit address would link the order to before signing.
-      console.log(describeExit(await exitAddressHistory({ chain, address })));
+      // only to this one chain address. Any other recipient is refused. Without
+      // --confirm it stops after the exit-address check and the policy it
+      // would sign, so the owner can still change their mind.
+      const [chain, address] = positional(['--rpc']);
+      if (!chain || !address) throw new Error('usage: allow-withdraw <chain> <address> [--rpc <url>] [--no-check] [--confirm]');
+      const problem = exitAddressProblem(chain, address);
+      if (problem) throw new Error(`${problem}; nothing was signed`);
+      if (address.startsWith('0x') && !isAddress(address, { strict: true })) {
+        throw new Error(`${address} fails its EIP-55 checksum (a typo?); nothing was signed`);
+      }
+      // The check asks a public RPC about the address, which tells that RPC the
+      // exit address and this IP together: --rpc picks the RPC, --no-check skips it.
+      const rpc = optionValue('--rpc');
+      if (args.includes('--no-check')) {
+        console.log('Exit address not checked (--no-check).');
+      } else {
+        console.log(`Checking the exit address through ${rpc ?? EVM_RPC[chain] ?? 'no RPC'}; that RPC sees the address and your IP.`);
+        console.log(describeExit(await exitAddressHistory({ chain, address, rpc })));
+      }
       const api = agentApi(env);
-      const { account } = loadOwner(env);
       const agentId = required(env, 'WAKELESS_AGENT_ID');
       const current = await api.getPolicy(agentId);
       if (!current.policy || current.revision == null) throw new Error('the agent has no applied policy yet');
@@ -149,6 +178,11 @@ async function main() {
         destinations: { mode: 'only', list: [{ action: 'withdraw', chain, address, memo: null }] },
       };
       console.log(`Policy revision ${current.revision} -> new revision. Actions ${policy.actions.join(', ')}; withdrawals only to ${chain}:${address}.`);
+      if (!confirmed) {
+        console.log('Preview only: nothing was signed. Add --confirm to have the owner sign this policy.');
+        return;
+      }
+      const { account } = loadOwner(env);
       const status = await runOwnerIntent(api, account, { type: 'policy_update', agent_id: agentId, expected_revision: current.revision, policy });
       if (status.status !== 'SUCCESS') throw new Error(`policy_update ended ${status.status}: ${status.failure_code ?? 'no failure code'}`);
       const after = await api.getPolicy(agentId);
@@ -297,8 +331,8 @@ async function main() {
     }
     default:
       console.log(
-        'commands: owner | create | grant | status | deposit <asset> [amount] | shield <asset> <amount> | ' +
-          'allow-withdraw <chain> <address> | withdraw <asset> <amount> <chain> <address> [--execute] | quote <from> <to> <amount> | ' +
+        'commands: owner | create | grant | status | deposit <asset> [amount] | shield <asset> <amount> [--confirm] | ' +
+          'allow-withdraw <chain> <address> [--rpc <url>] [--no-check] [--confirm] | withdraw <asset> <amount> <chain> <address> [--execute] | quote <from> <to> <amount> | ' +
           'cap <order.json> | prove-cap <order.json> [--out <file>] | freeze | unfreeze',
       );
   }
@@ -306,7 +340,7 @@ async function main() {
 
 main().catch((err) => {
   const detail = err?.body ?? err?.errors ?? err?.response ?? null;
-  console.error(`error: ${err.message}`);
+  console.error(`error: ${printable(safeErrorText(err))}`);
   if (detail) console.error(JSON.stringify(detail).slice(0, 1200));
   process.exitCode = 1;
 });

@@ -5,25 +5,44 @@ export const DEFAULT_BASE = 'https://1click.chaindefuser.com';
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Node's fetch quotes a header value it refuses in full ('Headers.append:
+// "<value>" is an invalid header value.'), and that value is an API key or a
+// grant token. Greedy from the first quote, so a value holding quotes is cut too.
+const QUOTED_HEADER_VALUE = /"[\s\S]*"(?=\s*is an invalid header value)/gi;
+
+/**
+ * An error's message, safe to print, journal or save: any header value the
+ * runtime quoted is cut out, and so is every string in `secrets`.
+ * @param {unknown} err
+ * @param {(string|undefined)[]} [secrets]
+ */
+export function safeErrorText(err, secrets = []) {
+  let text = String(err?.message ?? err ?? '');
+  for (const secret of secrets) if (secret) text = text.split(secret).join('<redacted>');
+  return text.replace(QUOTED_HEADER_VALUE, '"<redacted>"');
+}
+
 /**
  * @param {object} [opts]
  * @param {string} [opts.base]
  * @param {string} [opts.apiKey] partner key, sent as X-API-Key when present
  * @param {typeof fetch} [opts.fetchImpl]
- * @param {number} [opts.timeoutMs]
- * @param {number} [opts.retries] extra attempts after a 429, a 5xx or a network error
+ * @param {number} [opts.timeoutMs] longer than 1Click's own 25 s wait for its solvers
+ * @param {number} [opts.retries] extra attempts after a 429, a 5xx or a network error;
+ *   a timeout is tried again only once, because the next try usually times out too
  * @param {(ms: number) => Promise<void>} [opts.sleep]
  */
 export function createOneClick({
   base = DEFAULT_BASE,
   apiKey,
   fetchImpl = globalThis.fetch,
-  timeoutMs = 20_000,
+  timeoutMs = 30_000,
   retries = 2,
   sleep = pause,
 } = {}) {
   async function request(method, path, body) {
     let lastFailure;
+    let timeouts = 0;
     for (let attempt = 0; attempt <= retries; attempt++) {
       // Back off only after the server has refused once; the first try is immediate.
       if (attempt > 0) await sleep(500 * 2 ** (attempt - 1));
@@ -48,16 +67,21 @@ export function createOneClick({
         const result = { ok: res.ok, status: res.status, json, latencyMs: Date.now() - started };
         if (res.status === 429 || res.status >= 500) {
           lastFailure = result;
+          // 1Click answers 500 "Failed to receive response within timeout" when its own solvers are slow.
+          if (res.status >= 500 && /timeout/i.test(String(json?.message ?? '')) && ++timeouts > 1) break;
           continue;
         }
         return result;
       } catch (err) {
+        const timedOut = err?.name === 'TimeoutError' || err?.name === 'AbortError';
         lastFailure = {
           ok: false,
           status: 0,
-          json: { message: String(err?.message ?? err) },
+          // Name who did not answer; the AbortError text reads like a local failure.
+          json: { message: timedOut ? `1Click did not answer within ${Math.round(timeoutMs / 1000)} s` : safeErrorText(err, [apiKey]) },
           latencyMs: Date.now() - started,
         };
+        if (timedOut && ++timeouts > 1) break;
       }
     }
     return lastFailure;
