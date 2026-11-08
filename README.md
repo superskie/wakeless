@@ -64,13 +64,16 @@ Needs Node 22 or later. No keys, no funds, no dependencies to install.
 git clone https://github.com/superskie/wakeless && cd wakeless
 ```
 
-**Do** `npm test`. **See** 60 passing tests: schedule totals are exact to the
+**Do** `npm test`. **See** 81 passing tests: schedule totals are exact to the
 base unit, no fill is ever below the floor, oversized slices split until they
 clear, the report math matches a hand-computed case, and live mode, run
 against an Agent API double, submits each slice once, in confidential form,
 with the floor as its minimum output, and stops when it should. The
 pre-trade check picks the fewest slices that fit and is not fooled by one
-lucky quote, and the exit check flags an address with history.
+lucky quote, and the exit check flags an address with history. For live mode
+on the hosted desk: keccak-256 and the `personal_sign` signer recovery match
+known vectors, and the site's proxy forwards only the desk's own calls and
+refuses any wallet, grant or intent outside the hosted rules.
 
 **Do** `npm run impact`. **See** live 1Click quotes for $1,000 to $1,000,000
 of USDC (Arbitrum) to SOL (Solana). Cost rises with size, and the largest size
