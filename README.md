@@ -464,8 +464,23 @@ script and then from the page itself in Chrome:
 - the proxy refused a $500 wallet, a 30-day grant, a public-form swap and
   `GET /v1/agents`, the list of every agent under the partner key.
 
-No funded order has run from the hosted desk yet; the funded run so far is the
-command line one below.
+### A live run from the hosted desk, 8 November 2026
+
+25 USDC on Base went to ETH on Arbitrum from https://wakeless.pages.dev/web/
+in Live mode. A fresh browser wallet owned the agent: three signatures and one
+deposit, then the tab worked 4 slices over 10 minutes.
+
+- All 4 slices settled (`SUCCESS`), each at or above its floor, for 0.011165
+  ETH in total. The signed policy refused any swap above 9.56 USDC; the
+  largest slice was 7.56 USDC.
+- Against one swap of the whole order quoted at arrival, the slices received
+  3.3 bps more ETH: 2.2 bps of lower execution cost (13.2 against 15.4 bps)
+  and 1.1 bps of market move in the order's favour. At $25 that is about
+  $0.01; the run shows the visitor-owned path working end to end.
+- [examples/web-live-run.md](examples/web-live-run.md) is the report and
+  `examples/web-live-run.jsonl` the journal the desk downloaded, with the four
+  intent hashes. `node bin/wakeless.mjs report examples/web-live-run.jsonl`
+  rebuilds the report from it.
 
 ### The live run, 5 November 2026
 
